@@ -3,24 +3,59 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "@/contexts/AuthContext";
+
+// Pages
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
+import AdminDashboard from "./pages/AdminDashboard";
+import HODDashboard from "./pages/HODDashboard";
+import FacultyDashboard from "./pages/FacultyDashboard";
+import StudentExamDetails from "./pages/StudentExamDetails";
+import StudentSeatView from "./pages/StudentSeatView";
+
+// Auth Components
+import { AdminAuth } from "@/components/auth/AdminAuth";
+import { HODAuth } from "@/components/auth/HODAuth";
+import { FacultyVerify } from "@/components/auth/FacultyVerify";
+import { StudentVerify } from "@/components/auth/StudentVerify";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
+    <AuthProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            {/* Landing */}
+            <Route path="/" element={<Index />} />
+            
+            {/* Admin Routes */}
+            <Route path="/admin/auth" element={<AdminAuth />} />
+            <Route path="/admin/dashboard" element={<AdminDashboard />} />
+            
+            {/* HOD Routes */}
+            <Route path="/hod/auth" element={<HODAuth />} />
+            <Route path="/hod/dashboard" element={<HODDashboard />} />
+            
+            {/* Faculty Routes */}
+            <Route path="/faculty/verify" element={<FacultyVerify />} />
+            <Route path="/faculty/dashboard" element={<FacultyDashboard />} />
+            
+            {/* Student Routes */}
+            <Route path="/student/verify" element={<StudentVerify />} />
+            <Route path="/student/exam-details" element={<StudentExamDetails />} />
+            <Route path="/student/seat-view" element={<StudentSeatView />} />
+            
+            {/* Catch-all */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 
