@@ -33,9 +33,10 @@ const StudentSeatView: React.FC = () => {
   
   // Demo seating data
   const seatInfo = {
-    block: 'A',
-    classroom: 'Room 101',
-    seatNumber: 'A3-12',
+    block: 'Block 1',
+    floor: 1,
+    roomNumber: '1101',
+    seatNumber: 'R3-B4-L',
     row: 2,
     column: 3,
     examDate: examDetails.examDate || '2025-01-15',
@@ -105,8 +106,8 @@ const StudentSeatView: React.FC = () => {
                       <MapPin className="w-5 h-5 text-secondary" />
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">Classroom</p>
-                      <p className="font-semibold">{seatInfo.classroom}</p>
+                      <p className="text-sm text-muted-foreground">Location</p>
+                      <p className="font-semibold">{seatInfo.block} - Floor {seatInfo.floor} - Room {seatInfo.roomNumber}</p>
                     </div>
                   </div>
 

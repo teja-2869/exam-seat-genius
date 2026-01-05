@@ -9,6 +9,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import AdminDashboard from "./pages/AdminDashboard";
+import AdminGenerateSeating from "./pages/AdminGenerateSeating";
 import HODDashboard from "./pages/HODDashboard";
 import FacultyDashboard from "./pages/FacultyDashboard";
 import StudentExamDetails from "./pages/StudentExamDetails";
@@ -36,6 +37,7 @@ const App = () => (
             {/* Admin Routes */}
             <Route path="/admin/auth" element={<AdminAuth />} />
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
+            <Route path="/admin-generate-seating" element={<AdminGenerateSeating />} />
             
             {/* HOD Routes */}
             <Route path="/hod/auth" element={<HODAuth />} />

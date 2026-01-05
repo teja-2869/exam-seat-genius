@@ -3,35 +3,34 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { BookOpen, Building2, Hash, Loader2, CheckCircle2, XCircle } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
+import { BookOpen, Hash, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { StateSelect } from '@/components/common/StateSelect';
+import { CollegeSelect } from '@/components/common/CollegeSelect';
+import { getCollegeById } from '@/data/states-colleges';
 import { useToast } from '@/hooks/use-toast';
 
-// Demo colleges
-const demoColleges = [
-  { id: 'col_1', name: 'Demo Engineering College', code: 'DEC' },
-  { id: 'col_2', name: 'ABC Institute of Technology', code: 'AIT' },
-];
-
-// Demo valid student IDs
-const validStudentIds = ['24BFA33001', '24BFA33002', '23BCS45010'];
 
 export const StudentVerify: React.FC = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
   const { toast } = useToast();
   
+  const [selectedState, setSelectedState] = useState('');
   const [selectedCollege, setSelectedCollege] = useState('');
   const [studentId, setStudentId] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [verificationStatus, setVerificationStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
+  // Reset college when state changes
+  const handleStateChange = (stateCode: string) => {
+    setSelectedState(stateCode);
+    setSelectedCollege('');
+  };
+
   const verifyStudentId = async () => {
-    if (!selectedCollege || !studentId) {
+    if (!selectedState || !selectedCollege || !studentId) {
       toast({
         title: 'Missing Information',
-        description: 'Please select a college and enter your Student ID.',
+        description: 'Please select a state, college, and enter your Student ID.',
         variant: 'destructive',
       });
       return;
@@ -46,16 +45,17 @@ export const StudentVerify: React.FC = () => {
     // Check student ID format: Year (2 digits) + Branch Code (3-4 chars) + Roll Number (5 digits)
     const studentIdPattern = /^\d{2}[A-Z]{3,4}\d{5}$/;
     const isValidFormat = studentIdPattern.test(studentId);
-    const isValidId = validStudentIds.includes(studentId);
+    const isValidId = true; // Remove demo ID restriction
 
     if (isValidFormat && isValidId) {
       setVerificationStatus('success');
       
-      const college = demoColleges.find(c => c.id === selectedCollege)!;
+      const college = getCollegeById(selectedCollege);
       
       // Store student info for exam details page
       sessionStorage.setItem('studentId', studentId);
       sessionStorage.setItem('collegeId', selectedCollege);
+      sessionStorage.setItem('stateCode', selectedState);
       
       setTimeout(() => {
         toast({
@@ -95,22 +95,18 @@ export const StudentVerify: React.FC = () => {
         {/* Verification Form */}
         <div className="glass-card p-8 animate-slide-up">
           <div className="space-y-6">
-            <div className="space-y-2">
-              <Label>Select College</Label>
-              <Select value={selectedCollege} onValueChange={setSelectedCollege}>
-                <SelectTrigger>
-                  <Building2 className="w-4 h-4 mr-2 text-muted-foreground" />
-                  <SelectValue placeholder="Choose your college" />
-                </SelectTrigger>
-                <SelectContent>
-                  {demoColleges.map(college => (
-                    <SelectItem key={college.id} value={college.id}>
-                      {college.name} ({college.code})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <StateSelect
+              value={selectedState}
+              onChange={handleStateChange}
+              disabled={isVerifying}
+            />
+
+            <CollegeSelect
+              value={selectedCollege}
+              onChange={setSelectedCollege}
+              stateCode={selectedState}
+              disabled={isVerifying}
+            />
 
             <div className="space-y-2">
               <Label htmlFor="student-id">Student ID</Label>
@@ -150,7 +146,7 @@ export const StudentVerify: React.FC = () => {
               size="lg"
               className="w-full"
               onClick={verifyStudentId}
-              disabled={isVerifying || !selectedCollege || !studentId}
+              disabled={isVerifying || !selectedState || !selectedCollege || !studentId}
             >
               {isVerifying ? (
                 <>
@@ -168,12 +164,6 @@ export const StudentVerify: React.FC = () => {
           </div>
         </div>
 
-        {/* Demo Info */}
-        <div className="mt-6 p-4 bg-muted rounded-xl">
-          <p className="text-sm text-muted-foreground text-center">
-            <strong>Demo IDs:</strong> 24BFA33001, 24BFA33002, 23BCS45010
-          </p>
-        </div>
       </div>
     </div>
   );
