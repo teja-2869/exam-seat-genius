@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
-import { Header } from '@/components/layout/Header';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Users, 
-  Upload, 
-  Building2, 
+import { HODLayout } from '@/components/layout/HODLayout';
+import { DepartmentStats } from '@/components/hod/DepartmentStats';
+import { HODQuickActions } from '@/components/hod/HODQuickActions';
+import { HODActivityFeed } from '@/components/hod/HODActivityFeed';
+import {
+  Users,
+  Upload,
+  Building2,
   ClipboardList,
   Eye,
   UserCheck,
@@ -23,7 +26,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { 
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -36,44 +39,32 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-const stats = [
-  { label: 'Department Students', value: '385', icon: Users, color: 'text-secondary', bg: 'bg-secondary/10' },
-  { label: 'Classrooms', value: '12', icon: Building2, color: 'text-primary', bg: 'bg-primary/10' },
-  { label: 'Upcoming Exams', value: '4', icon: ClipboardList, color: 'text-accent', bg: 'bg-accent/10' },
-  { label: 'Faculty', value: '28', icon: UserCheck, color: 'text-panel-student', bg: 'bg-panel-student/10' },
-];
-
-const quickActions = [
-  { label: 'Upload Students', icon: Upload, description: 'Import student data via CSV', variant: 'hod' as const },
-  { label: 'Manage Classrooms', icon: Building2, description: 'Add or edit classroom details', variant: 'secondary' as const },
-  { label: 'View Seating', icon: Eye, description: 'Check seating arrangements', variant: 'outline' as const },
-  { label: 'View Invigilation', icon: UserCheck, description: 'See invigilation duties', variant: 'outline' as const },
-];
+// Stats and QuickActions config moved to modular components inside components/hod/
 
 const recentUploads = [
-  { 
+  {
     id: '1',
-    name: 'Students_Sem4_2025.csv', 
-    date: 'Jan 10, 2025', 
-    records: 120, 
+    name: 'Students_Sem4_2025.csv',
+    date: 'Jan 10, 2025',
+    records: 120,
     status: 'Processed',
     type: 'students',
     department: 'Computer Science'
   },
-  { 
+  {
     id: '2',
-    name: 'Classroom_Block_A.csv', 
-    date: 'Jan 8, 2025', 
-    records: 8, 
+    name: 'Classroom_Block_A.csv',
+    date: 'Jan 8, 2025',
+    records: 8,
     status: 'Processed',
     type: 'classrooms',
     department: 'Computer Science'
   },
-  { 
+  {
     id: '3',
-    name: 'Faculty_List.csv', 
-    date: 'Jan 5, 2025', 
-    records: 28, 
+    name: 'Faculty_List.csv',
+    date: 'Jan 5, 2025',
+    records: 28,
     status: 'Processed',
     type: 'faculty',
     department: 'Computer Science'
@@ -96,7 +87,7 @@ const mockInvigilationDuties = [
 const HODDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { college, user } = useAuth();
-  
+
   // Dialog states
   const [showStudentUpload, setShowStudentUpload] = useState(false);
   const [showClassroomDialog, setShowClassroomDialog] = useState(false);
@@ -104,7 +95,7 @@ const HODDashboard: React.FC = () => {
   const [showInvigilationDialog, setShowInvigilationDialog] = useState(false);
   const [showUploadDetails, setShowUploadDetails] = useState(false);
   const [selectedUpload, setSelectedUpload] = useState<any>(null);
-  
+
   // Form states
   const [classroomForm, setClassroomForm] = useState({
     name: '',
@@ -114,7 +105,7 @@ const HODDashboard: React.FC = () => {
     equipment: '',
     floor: ''
   });
-  
+
   const [uploadStatus, setUploadStatus] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -184,178 +175,151 @@ const HODDashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      
-      <main className="pt-24 pb-12 px-6">
-        <div className="max-w-7xl mx-auto">
-          {/* Welcome Section */}
-          <div className="mb-8 animate-fade-in">
-            <h1 className="text-3xl font-display font-bold text-foreground mb-2">
-              Department Dashboard
-            </h1>
-            <p className="text-muted-foreground">
-              Manage student and classroom data for your department
-            </p>
-          </div>
+    <HODLayout>
+      <div className="max-w-7xl mx-auto space-y-8 animate-fade-in">
 
-          {/* Stats Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            {stats.map((stat, index) => (
-              <div
-                key={stat.label}
-                className="dashboard-card animate-slide-up"
-                style={{ animationDelay: `${index * 100}ms` }}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">{stat.label}</p>
-                    <p className="text-3xl font-display font-bold text-foreground">{stat.value}</p>
-                  </div>
-                  <div className={`w-12 h-12 rounded-xl ${stat.bg} flex items-center justify-center`}>
-                    <stat.icon className={`w-6 h-6 ${stat.color}`} />
-                  </div>
-                </div>
-              </div>
-            ))}
+        {/* Breadcrumb & Welcome Section */}
+        <div>
+          <div className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
+            <span>HOD</span>
+            <span>/</span>
+            <span className="text-foreground font-medium">Dashboard</span>
           </div>
+          <h1 className="text-3xl font-display font-bold text-foreground mb-2">
+            Department Dashboard
+          </h1>
+          <p className="text-muted-foreground">
+            Manage student, faculty and classroom data for your department
+          </p>
+        </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Top Section - KPI Cards */}
+        <DepartmentStats />
+
+        {/* Middle & Bottom Sections - Grid Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+          <div className="lg:col-span-1 space-y-6">
             {/* Quick Actions */}
-            <div className="lg:col-span-1 animate-slide-up stagger-1">
-              <Card className="dashboard-card">
-                <CardHeader>
-                  <CardTitle className="text-xl font-display font-bold text-foreground">Quick Actions</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {quickActions.map((action) => (
-                    <Button
-                      key={action.label}
-                      variant={action.variant}
-                      className="w-full justify-start h-auto py-4"
-                      onClick={() => handleQuickAction(action.label)}
-                    >
-                      <action.icon className="w-5 h-5 mr-3" />
-                      <div className="text-left">
-                        <p className="font-semibold">{action.label}</p>
-                        <p className="text-xs opacity-80">{action.description}</p>
-                      </div>
-                    </Button>
-                  ))}
-                </CardContent>
-              </Card>
+            <div className="animate-slide-up stagger-1 h-fit">
+              <HODQuickActions onAction={handleQuickAction} />
             </div>
 
-            {/* Recent Uploads */}
-            <div className="lg:col-span-2 animate-slide-up stagger-2">
-              <Card className="dashboard-card">
-                <div className="flex items-center justify-between mb-6">
-                  <CardTitle className="text-xl font-display font-bold text-foreground">Recent Uploads</CardTitle>
-                  <Button variant="ghost" size="sm">
-                    View All <ArrowRight className="w-4 h-4 ml-2" />
-                  </Button>
-                </div>
-
-                <div className="space-y-4">
-                  {recentUploads.map((upload) => (
-                    <div
-                      key={upload.id}
-                      className="flex items-center justify-between p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
-                      onClick={() => handleViewUploadDetails(upload)}
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-secondary/10 flex items-center justify-center">
-                          <FileSpreadsheet className="w-5 h-5 text-secondary" />
-                        </div>
-                        <div>
-                          <p className="font-semibold text-foreground">{upload.name}</p>
-                          <p className="text-sm text-muted-foreground">{upload.date} • {upload.department}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <p className="text-sm font-medium text-foreground">{upload.records} records</p>
-                          <Badge variant={upload.status === 'Processed' ? 'default' : 'secondary'}>
-                            {upload.status}
-                          </Badge>
-                        </div>
-                        <div className="flex gap-1">
-                          <Button 
-                            variant="ghost" 
-                            size="icon"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleViewUploadDetails(upload);
-                            }}
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteUpload(upload.id);
-                            }}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
+            {/* Activity Feed */}
+            <div className="animate-slide-up stagger-2 h-96">
+              <HODActivityFeed />
             </div>
           </div>
 
-          {/* Upload Section */}
-          <div className="mt-8 animate-slide-up stagger-3">
+          {/* Recent Uploads */}
+          <div className="lg:col-span-2 animate-slide-up stagger-2">
             <Card className="dashboard-card">
-              <CardHeader>
-                <CardTitle className="text-xl font-display font-bold text-foreground">
-                  Upload Data
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Student Upload */}
-                  <div className="border-2 border-dashed border-border rounded-2xl p-8 text-center hover:border-secondary transition-colors cursor-pointer"
-                       onClick={() => setShowStudentUpload(true)}>
-                    <div className="w-16 h-16 rounded-2xl bg-secondary/10 flex items-center justify-center mx-auto mb-4">
-                      <Users className="w-8 h-8 text-secondary" />
-                    </div>
-                    <h3 className="font-display font-semibold text-lg mb-2">Upload Students</h3>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Import student data from CSV file
-                    </p>
-                    <Button variant="hod">
-                      <Upload className="w-4 h-4 mr-2" />
-                      Choose File
-                    </Button>
-                  </div>
+              <div className="flex items-center justify-between mb-6">
+                <CardTitle className="text-xl font-display font-bold text-foreground">Recent Uploads</CardTitle>
+                <Button variant="ghost" size="sm">
+                  View All <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </div>
 
-                  {/* Classroom Upload */}
-                  <div className="border-2 border-dashed border-border rounded-2xl p-8 text-center hover:border-primary transition-colors cursor-pointer"
-                       onClick={() => setShowClassroomDialog(true)}>
-                    <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                      <Building2 className="w-8 h-8 text-primary" />
+              <div className="space-y-4">
+                {recentUploads.map((upload) => (
+                  <div
+                    key={upload.id}
+                    className="flex items-center justify-between p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                    onClick={() => handleViewUploadDetails(upload)}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-secondary/10 flex items-center justify-center">
+                        <FileSpreadsheet className="w-5 h-5 text-secondary" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-foreground">{upload.name}</p>
+                        <p className="text-sm text-muted-foreground">{upload.date} • {upload.department}</p>
+                      </div>
                     </div>
-                    <h3 className="font-display font-semibold text-lg mb-2">Add Classroom</h3>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Enter classroom and lab details
-                    </p>
-                    <Button variant="default">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Room
-                    </Button>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <p className="text-sm font-medium text-foreground">{upload.records} records</p>
+                        <Badge variant={upload.status === 'Processed' ? 'default' : 'secondary'}>
+                          {upload.status}
+                        </Badge>
+                      </div>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewUploadDetails(upload);
+                          }}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteUpload(upload.id);
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
+                ))}
+              </div>
             </Card>
           </div>
         </div>
-      </main>
+
+        {/* Upload Section */}
+        <div className="mt-8 animate-slide-up stagger-3">
+          <Card className="dashboard-card">
+            <CardHeader>
+              <CardTitle className="text-xl font-display font-bold text-foreground">
+                Upload Data
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Student Upload */}
+                <div className="border-2 border-dashed border-border rounded-2xl p-8 text-center hover:border-secondary transition-colors cursor-pointer"
+                  onClick={() => setShowStudentUpload(true)}>
+                  <div className="w-16 h-16 rounded-2xl bg-secondary/10 flex items-center justify-center mx-auto mb-4">
+                    <Users className="w-8 h-8 text-secondary" />
+                  </div>
+                  <h3 className="font-display font-semibold text-lg mb-2">Upload Students</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Import student data from CSV file
+                  </p>
+                  <Button variant="hod">
+                    <Upload className="w-4 h-4 mr-2" />
+                    Choose File
+                  </Button>
+                </div>
+
+                {/* Classroom Upload */}
+                <div className="border-2 border-dashed border-border rounded-2xl p-8 text-center hover:border-primary transition-colors cursor-pointer"
+                  onClick={() => setShowClassroomDialog(true)}>
+                  <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                    <Building2 className="w-8 h-8 text-primary" />
+                  </div>
+                  <h3 className="font-display font-semibold text-lg mb-2">Add Classroom</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Enter classroom and lab details
+                  </p>
+                  <Button variant="default">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Room
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
 
       {/* Student Upload Dialog */}
       <Dialog open={showStudentUpload} onOpenChange={setShowStudentUpload}>
@@ -385,14 +349,14 @@ const HODDashboard: React.FC = () => {
                 </label>
               </Button>
             </div>
-            
+
             <div className="flex justify-center">
               <Button variant="outline" onClick={handleDownloadTemplate}>
                 <Download className="w-4 h-4 mr-2" />
                 Download Template
               </Button>
             </div>
-            
+
             {uploadStatus && (
               <div className="p-3 bg-muted/50 rounded-lg">
                 <p className="text-sm text-muted-foreground">{uploadStatus}</p>
@@ -405,10 +369,10 @@ const HODDashboard: React.FC = () => {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog >
 
       {/* Classroom Management Dialog */}
-      <Dialog open={showClassroomDialog} onOpenChange={setShowClassroomDialog}>
+      < Dialog open={showClassroomDialog} onOpenChange={setShowClassroomDialog} >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add/Edit Classroom</DialogTitle>
@@ -519,10 +483,10 @@ const HODDashboard: React.FC = () => {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog >
 
       {/* Seating View Dialog */}
-      <Dialog open={showSeatingDialog} onOpenChange={setShowSeatingDialog}>
+      < Dialog open={showSeatingDialog} onOpenChange={setShowSeatingDialog} >
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>Seating Arrangements</DialogTitle>
@@ -555,10 +519,10 @@ const HODDashboard: React.FC = () => {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog >
 
       {/* Invigilation View Dialog */}
-      <Dialog open={showInvigilationDialog} onOpenChange={setShowInvigilationDialog}>
+      < Dialog open={showInvigilationDialog} onOpenChange={setShowInvigilationDialog} >
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>Invigilation Duties</DialogTitle>
@@ -591,10 +555,10 @@ const HODDashboard: React.FC = () => {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog >
 
       {/* Upload Details Dialog */}
-      <Dialog open={showUploadDetails} onOpenChange={setShowUploadDetails}>
+      < Dialog open={showUploadDetails} onOpenChange={setShowUploadDetails} >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Upload Details</DialogTitle>
@@ -645,7 +609,7 @@ const HODDashboard: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </HODLayout >
   );
 };
 

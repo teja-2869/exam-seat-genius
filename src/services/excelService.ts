@@ -23,7 +23,7 @@ export class ExcelService {
   static async parseExcelFile(file: File): Promise<ParsedExcelData> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      
+
       reader.onload = (e) => {
         try {
           const data = e.target?.result;
@@ -31,14 +31,14 @@ export class ExcelService {
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
           const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-          
-          const result = this.processExcelData(jsonData);
+
+          const result = this.processExcelData(jsonData as any[][]);
           resolve(result);
         } catch (error) {
           reject(new Error('Failed to parse Excel file: ' + error));
         }
       };
-      
+
       reader.onerror = () => reject(new Error('Failed to read file'));
       reader.readAsBinaryString(file);
     });
@@ -50,13 +50,13 @@ export class ExcelService {
   private static processExcelData(jsonData: any[][]): ParsedExcelData {
     const students: ExcelStudentData[] = [];
     const errors: string[] = [];
-    
+
     // Skip header row and process data
     for (let i = 1; i < jsonData.length; i++) {
       const row = jsonData[i];
-      
+
       if (!row || row.length === 0) continue;
-      
+
       try {
         const student = this.validateAndTransformRow(row, i + 1);
         if (student) {
@@ -81,30 +81,30 @@ export class ExcelService {
   private static validateAndTransformRow(row: any, rowNumber: number): ExcelStudentData | null {
     // Expected columns: Name, Roll Number, Branch, Exam, Subject
     const [name, rollNumber, branch, exam, subject] = row;
-    
+
     // Skip empty rows
     if (!name && !rollNumber) return null;
-    
+
     // Validate required fields
     if (!name || typeof name !== 'string') {
       throw new Error('Name is required and must be text');
     }
-    
+
     if (!rollNumber) {
       throw new Error('Roll number is required');
     }
-    
+
     if (!branch) {
       throw new Error('Branch is required');
     }
-    
+
     if (!exam) {
       throw new Error('Exam is required');
     }
-    
+
     // Check if student is eligible (roll number present = eligible, missing = detained)
     const isEligible = !!rollNumber && rollNumber.toString().trim() !== '';
-    
+
     return {
       name: name.toString().trim(),
       rollNumber: rollNumber.toString().trim(),
@@ -125,11 +125,11 @@ export class ExcelService {
       ['Jane Smith', 'CS002', 'Computer Science', 'Database Management', 'Database Systems'],
       ['Mike Johnson', 'CS003', 'Computer Science', 'Computer Networks', 'Networking']
     ];
-    
+
     const worksheet = XLSX.utils.aoa_to_sheet(template);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Students');
-    
+
     XLSX.writeFile(workbook, 'student_template.xlsx');
   }
 
@@ -148,11 +148,11 @@ export class ExcelService {
         student.isEligible ? 'Yes' : 'No'
       ])
     ];
-    
+
     const worksheet = XLSX.utils.aoa_to_sheet(data);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Students');
-    
+
     XLSX.writeFile(workbook, filename);
   }
 }

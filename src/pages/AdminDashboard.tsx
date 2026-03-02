@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
-import { Header } from '@/components/layout/Header';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Building2, 
-  Users, 
-  GraduationCap, 
+import { AdminLayout } from '@/components/layout/AdminLayout';
+import { KPICards } from '@/components/dashboard/KPICards';
+import { QuickActions } from '@/components/dashboard/QuickActions';
+import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
+import {
+  Building2,
+  Users,
+  GraduationCap,
   ClipboardList,
   Grid3X3,
   UserCheck,
@@ -22,7 +25,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { 
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -36,22 +39,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 
-const stats = [
-  { label: 'Total Students', value: '2,450', icon: Users, color: 'text-primary', bg: 'bg-primary/10' },
-  { label: 'Faculty Members', value: '156', icon: GraduationCap, color: 'text-secondary', bg: 'bg-secondary/10' },
-  { label: 'Active Exams', value: '12', icon: ClipboardList, color: 'text-accent', bg: 'bg-accent/10' },
-  { label: 'Classrooms', value: '48', icon: Building2, color: 'text-panel-student', bg: 'bg-panel-student/10' },
-];
-
-const quickActions = [
-  { label: 'Create Exam', icon: Plus, description: 'Set up a new examination', variant: 'admin' as const },
-  { label: 'Arrange Seating', icon: Grid3X3, description: 'AI-powered seat assignment', variant: 'secondary' as const },
-  { label: 'Assign Invigilators', icon: UserCheck, description: 'Manage invigilation duties', variant: 'accent' as const },
-  { label: 'Send Notifications', icon: Bell, description: 'Notify students & faculty', variant: 'outline' as const },
-];
+// Hardcoded stats and quick actions removed in favor of modular components
 
 const recentExams = [
-  { 
+  {
     id: '1',
     name: 'Data Structures Midterm',
     subject: 'Data Structures',
@@ -62,7 +53,7 @@ const recentExams = [
     students: 45,
     status: 'Scheduled'
   },
-  { 
+  {
     id: '2',
     name: 'Database Management Final',
     subject: 'Database Management',
@@ -73,7 +64,7 @@ const recentExams = [
     students: 52,
     status: 'Scheduled'
   },
-  { 
+  {
     id: '3',
     name: 'Computer Networks Quiz',
     subject: 'Computer Networks',
@@ -102,7 +93,7 @@ const AdminDashboard: React.FC = () => {
   const [showAssignInvigilators, setShowAssignInvigilators] = useState(false);
   const [showNotificationDialog, setShowNotificationDialog] = useState(false);
   const [showSeatingDialog, setShowSeatingDialog] = useState(false);
-  
+
   // Form states
   const [examForm, setExamForm] = useState({
     name: '',
@@ -113,13 +104,13 @@ const AdminDashboard: React.FC = () => {
     room: '',
     description: ''
   });
-  
+
   const [notificationForm, setNotificationForm] = useState({
     title: '',
     message: '',
     recipients: 'all'
   });
-  
+
   const [selectedInvigilators, setSelectedInvigilators] = useState<string[]>([]);
 
   const handleQuickAction = (action: string) => {
@@ -206,175 +197,148 @@ const AdminDashboard: React.FC = () => {
   };
 
   const toggleInvigilatorSelection = (facultyId: string) => {
-    setSelectedInvigilators(prev => 
-      prev.includes(facultyId) 
+    setSelectedInvigilators(prev =>
+      prev.includes(facultyId)
         ? prev.filter(id => id !== facultyId)
         : [...prev, facultyId]
     );
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      
-      <main className="pt-24 pb-12 px-6">
-        <div className="max-w-7xl mx-auto">
-          {/* Welcome Section */}
-          <div className="mb-8 animate-fade-in">
-            <h1 className="text-3xl font-display font-bold text-foreground mb-2">
-              Welcome back, Admin
-            </h1>
-            <p className="text-muted-foreground">
-              Manage examinations for {college?.name || 'your college'}
-            </p>
-          </div>
+    <AdminLayout>
+      <div className="max-w-7xl mx-auto space-y-8 animate-fade-in">
 
-          {/* Stats Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            {stats.map((stat, index) => (
-              <div
-                key={stat.label}
-                className="dashboard-card animate-slide-up"
-                style={{ animationDelay: `${index * 100}ms` }}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">{stat.label}</p>
-                    <p className="text-3xl font-display font-bold text-foreground">{stat.value}</p>
-                  </div>
-                  <div className={`w-12 h-12 rounded-xl ${stat.bg} flex items-center justify-center`}>
-                    <stat.icon className={`w-6 h-6 ${stat.color}`} />
-                  </div>
-                </div>
-              </div>
-            ))}
+        {/* Breadcrumb & Welcome Section */}
+        <div>
+          <div className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
+            <span>Admin</span>
+            <span>/</span>
+            <span className="text-foreground font-medium">Dashboard</span>
           </div>
+          <h1 className="text-3xl font-display font-bold text-foreground mb-2">
+            Welcome back, {user?.name || 'Admin'}
+          </h1>
+          <p className="text-muted-foreground">
+            Manage examinations for {college?.name || 'your college'}
+          </p>
+        </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Top Section - KPI Cards */}
+        <KPICards />
+
+        {/* Middle & Bottom Sections - Grid Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+          <div className="lg:col-span-1 space-y-6">
             {/* Quick Actions */}
-            <div className="lg:col-span-1 animate-slide-up stagger-1">
-              <Card className="dashboard-card">
-                <CardHeader>
-                  <CardTitle className="text-xl font-display font-bold text-foreground">Quick Actions</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {quickActions.map((action) => (
-                    <Button
-                      key={action.label}
-                      variant={action.variant}
-                      className="w-full justify-start h-auto py-4"
-                      onClick={() => handleQuickAction(action.label)}
-                    >
-                      <action.icon className="w-5 h-5 mr-3" />
-                      <div className="text-left">
-                        <p className="font-semibold">{action.label}</p>
-                        <p className="text-xs opacity-80">{action.description}</p>
-                      </div>
-                    </Button>
-                  ))}
-                </CardContent>
-              </Card>
+            <div className="animate-slide-up stagger-1 h-fit">
+              <QuickActions />
             </div>
 
-            {/* Recent Exams */}
-            <div className="lg:col-span-2 animate-slide-up stagger-2">
-              <Card className="dashboard-card">
-                <div className="flex items-center justify-between mb-6">
-                  <CardTitle className="text-xl font-display font-bold text-foreground">Recent Exams</CardTitle>
-                  <Button variant="ghost" size="sm">
-                    View All <ArrowRight className="w-4 h-4 ml-2" />
-                  </Button>
-                </div>
-
-                <div className="space-y-4">
-                  {recentExams.map((exam, index) => (
-                    <div
-                      key={exam.id}
-                      className="flex items-center justify-between p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
-                      onClick={() => handleViewExamDetails(exam)}
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                          <ClipboardList className="w-5 h-5 text-primary" />
-                        </div>
-                        <div>
-                          <p className="font-semibold text-foreground">{exam.name}</p>
-                          <p className="text-sm text-muted-foreground">{exam.date} • {exam.room}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <p className="text-sm font-medium text-foreground">{exam.students} students</p>
-                          <Badge variant={exam.status === 'Published' ? 'default' : 'secondary'}>
-                            {exam.status}
-                          </Badge>
-                        </div>
-                        <div className="flex gap-1">
-                          <Button 
-                            variant="ghost" 
-                            size="icon"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleViewExamDetails(exam);
-                            }}
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEditExam(exam);
-                            }}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteExam(exam.id);
-                            }}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
+            {/* Activity Feed */}
+            <div className="animate-slide-up stagger-2 h-96">
+              <ActivityFeed />
             </div>
           </div>
 
-          {/* AI Validation Banner */}
-          <div className="mt-8 animate-slide-up stagger-3">
-            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary to-secondary p-8">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl"></div>
-              <div className="relative z-10 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center">
-                    <Sparkles className="w-7 h-7 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-display font-bold text-white mb-1">
-                      AI-Powered Seating Validation
-                    </h3>
-                    <p className="text-white/80">
-                      Use Google Gemini to validate seating arrangements and prevent conflicts
-                    </p>
-                  </div>
-                </div>
-                <Button variant="glass" size="lg" onClick={handleArrangeSeating}>
-                  Run Validation
+          {/* Recent Exams */}
+          <div className="lg:col-span-2 animate-slide-up stagger-2">
+            <Card className="dashboard-card">
+              <div className="flex items-center justify-between mb-6">
+                <CardTitle className="text-xl font-display font-bold text-foreground">Recent Exams</CardTitle>
+                <Button variant="ghost" size="sm">
+                  View All <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               </div>
+
+              <div className="space-y-4">
+                {recentExams.map((exam, index) => (
+                  <div
+                    key={exam.id}
+                    className="flex items-center justify-between p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                    onClick={() => handleViewExamDetails(exam)}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                        <ClipboardList className="w-5 h-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-foreground">{exam.name}</p>
+                        <p className="text-sm text-muted-foreground">{exam.date} • {exam.room}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <p className="text-sm font-medium text-foreground">{exam.students} students</p>
+                        <Badge variant={exam.status === 'Published' ? 'default' : 'secondary'}>
+                          {exam.status}
+                        </Badge>
+                      </div>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewExamDetails(exam);
+                          }}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditExam(exam);
+                          }}
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteExam(exam.id);
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </div>
+        </div>
+
+        {/* AI Validation Banner */}
+        <div className="mt-8 animate-slide-up stagger-3">
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary to-secondary p-8">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl"></div>
+            <div className="relative z-10 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center">
+                  <Sparkles className="w-7 h-7 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-display font-bold text-white mb-1">
+                    AI-Powered Seating Validation
+                  </h3>
+                  <p className="text-white/80">
+                    Use Google Gemini to validate seating arrangements and prevent conflicts
+                  </p>
+                </div>
+              </div>
+              <Button variant="glass" size="lg" onClick={handleArrangeSeating}>
+                Run Validation
+              </Button>
             </div>
           </div>
         </div>
-      </main>
+      </div>
 
       {/* Create/Edit Exam Dialog */}
       <Dialog open={showCreateExam} onOpenChange={setShowCreateExam}>
@@ -674,7 +638,7 @@ const AdminDashboard: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </AdminLayout>
   );
 };
 

@@ -4,14 +4,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ShieldCheck, Building2, MapPin, Mail, Lock, Hash, GitBranch, Plus, X } from 'lucide-react';
+import { ShieldCheck, Mail, Lock, Building2, MapPin, Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-
-interface BranchInput {
-  name: string;
-  code: string;
-}
+import { auth, db } from '@/lib/firebase';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { InstitutionSelector } from '@/features/institution/InstitutionSelector';
+import emailjs from '@emailjs/browser';
 
 export const AdminAuth: React.FC = () => {
   const navigate = useNavigate();
@@ -20,105 +20,187 @@ export const AdminAuth: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   // Sign Up State
-  const [collegeName, setCollegeName] = useState('');
-  const [collegeCode, setCollegeCode] = useState('');
-  const [location, setLocation] = useState('');
+  const [selectedInstitution, setSelectedInstitution] = useState<any>(null);
+  const [showSignupForm, setShowSignupForm] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [blocks, setBlocks] = useState('');
-  const [branches, setBranches] = useState<BranchInput[]>([{ name: '', code: '' }]);
+  const [confirmPassword, setConfirmPassword] = useState('');
 
-  // Login State
+  // Login & OTP State
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [showOtpForm, setShowOtpForm] = useState(false);
+  const [generatedOtp, setGeneratedOtp] = useState('');
+  const [enteredOtp, setEnteredOtp] = useState('');
 
-  const addBranch = () => {
-    setBranches([...branches, { name: '', code: '' }]);
-  };
-
-  const removeBranch = (index: number) => {
-    if (branches.length > 1) {
-      setBranches(branches.filter((_, i) => i !== index));
-    }
-  };
-
-  const updateBranch = (index: number, field: 'name' | 'code', value: string) => {
-    const updated = [...branches];
-    updated[index][field] = value;
-    setBranches(updated);
-  };
+  const [draftInstitution, setDraftInstitution] = useState<any>(null);
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedInstitution) {
+      toast({ title: 'Error', description: 'Please select an institution first.', variant: 'destructive' });
+      return;
+    }
+    if (password !== confirmPassword) {
+      toast({ title: 'Error', description: 'Passwords do not match.', variant: 'destructive' });
+      return;
+    }
+
     setIsLoading(true);
 
-    // Simulate registration
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const firebaseUser = userCredential.user;
 
-    const college = {
-      id: 'col_1',
-      name: collegeName,
-      code: collegeCode,
-      location,
-      email,
-      blocks: parseInt(blocks),
-      branches: branches.map((b, i) => ({ id: `br_${i}`, ...b, collegeId: 'col_1' })),
-      createdAt: new Date(),
-    };
+      const user = {
+        uid: firebaseUser.uid,
+        email,
+        role: 'ADMIN' as const,
+        institutionId: selectedInstitution.id,
+        institutionName: selectedInstitution.name,
+        name: 'Admin',
+        createdAt: new Date()
+      };
 
-    const user = {
-      id: 'admin_1',
-      email,
-      role: 'admin' as const,
-      collegeId: 'col_1',
-      name: 'Admin',
-    };
+      // 1. Create the user
+      await setDoc(doc(db, 'users', firebaseUser.uid), user);
 
-    login(user, college);
-    toast({
-      title: 'Registration Successful',
-      description: 'Your college has been registered successfully.',
-    });
-    navigate('/admin/dashboard');
-    setIsLoading(false);
+      // 2. Register the institution (if it was from the JSON dataset, write it to Firestore so it's a valid tenant)
+      const instRef = doc(db, 'institutions', selectedInstitution.id);
+      const instDoc = await getDoc(instRef);
+      if (!instDoc.exists()) {
+        await setDoc(instRef, {
+          id: selectedInstitution.id,
+          name: selectedInstitution.name,
+          state: selectedInstitution.state,
+          district: selectedInstitution.district,
+          university: selectedInstitution.university || '',
+          collegeCode: selectedInstitution.collegeCode || '',
+          verificationStatus: 'verified', // Verify instantly for demo
+          createdAt: new Date()
+        });
+      }
+
+      login(user as any, selectedInstitution as any);
+
+      toast({
+        title: 'Registration Successful',
+        description: 'Your admin account has secured access to ' + selectedInstitution.name,
+      });
+      navigate('/admin/dashboard');
+    } catch (error: any) {
+      console.error(error);
+      toast({
+        title: 'Registration Failed',
+        description: error.message || 'An error occurred during registration.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const requestOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate login
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+      // 1. Verify credentials by attempting a hidden signin
+      await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
 
-    const college = {
-      id: 'col_1',
-      name: 'Demo Engineering College',
-      code: 'DEC',
-      location: 'Demo City',
-      email: loginEmail,
-      blocks: 5,
-      branches: [
-        { id: 'br_1', name: 'Computer Science', code: 'CS', collegeId: 'col_1' },
-        { id: 'br_2', name: 'Electronics', code: 'EC', collegeId: 'col_1' },
-      ],
-      createdAt: new Date(),
-    };
+      // 2. Ensure they are actually an admin
+      const userDoc = await getDoc(doc(db, 'users', auth.currentUser!.uid));
+      if (!userDoc.exists()) throw new Error('User not found in database');
+      const userData = userDoc.data() as any;
 
-    const user = {
-      id: 'admin_1',
-      email: loginEmail,
-      role: 'admin' as const,
-      collegeId: 'col_1',
-      name: 'Admin',
-    };
+      if (userData.role !== 'ADMIN' && userData.role !== 'admin') {
+        throw new Error('Insufficient permissions. You are not an admin.');
+      }
 
-    login(user, college);
-    toast({
-      title: 'Login Successful',
-      description: 'Welcome back!',
-    });
-    navigate('/admin/dashboard');
-    setIsLoading(false);
+      // 3. Prevent AuthContext from auto-routing by immediately signing out
+      await signOut(auth);
+
+      // 4. Generate OTP
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+      try {
+        // Send actual email via EmailJS
+        // Note: Make sure your .env contains VITE_EMAILJS_SERVICE_ID, VITE_EMAILJS_TEMPLATE_ID, VITE_EMAILJS_PUBLIC_KEY
+        await emailjs.send(
+          import.meta.env.VITE_EMAILJS_SERVICE_ID || 'default_service',
+          import.meta.env.VITE_EMAILJS_TEMPLATE_ID || 'default_template',
+          {
+            to_email: loginEmail,
+            otp: otp,
+            role: 'Admin'
+          },
+          import.meta.env.VITE_EMAILJS_PUBLIC_KEY || 'default_public_key'
+        );
+
+        setGeneratedOtp(otp);
+        setShowOtpForm(true);
+
+        toast({
+          title: 'OTP Sent Successfully',
+          description: `Check the inbox of ${loginEmail} for your code.`,
+        });
+      } catch (emailErr) {
+        console.error("EmailJS Failed:", emailErr);
+        throw new Error("Failed to send OTP email. Please ensure EmailJS is configured properly in your .env file or bypass in code.");
+      }
+
+    } catch (error: any) {
+      console.error(error);
+      // Ensure we remain signed out if auth failed or role failed midway
+      if (auth.currentUser) await signOut(auth);
+
+      toast({
+        title: 'Login Failed',
+        description: error.message || 'Invalid email or password.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerifyOTP = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (enteredOtp !== generatedOtp) {
+      toast({
+        title: 'Invalid OTP',
+        description: 'The OTP entered is incorrect.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // Re-authenticate and proceed
+      const userCredential = await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
+      const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+      const user = userDoc.data() as any;
+
+      const collegeDoc = await getDoc(doc(db, 'institutions', user.institutionId));
+      let college = collegeDoc.exists() ? collegeDoc.data() : { id: user.institutionId, name: user.institutionName };
+
+      login(user, college as any);
+      toast({
+        title: 'Login Successful',
+        description: 'Welcome to the Admin Dashboard.',
+      });
+      navigate('/admin/dashboard');
+    } catch (error: any) {
+      toast({
+        title: 'OTP Verification Failed',
+        description: 'An error occurred.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -147,190 +229,181 @@ export const AdminAuth: React.FC = () => {
 
             {/* Login Tab */}
             <TabsContent value="login">
-              <form onSubmit={handleLogin} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="login-email">College Email</Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+              {!showOtpForm ? (
+                <form onSubmit={requestOTP} className="space-y-4 animate-fade-in">
+                  <div className="space-y-2">
+                    <Label htmlFor="login-email">College Email</Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                      <Input
+                        id="login-email"
+                        type="email"
+                        placeholder="admin@college.edu"
+                        className="pl-11"
+                        value={loginEmail}
+                        onChange={(e) => setLoginEmail(e.target.value)}
+                        required
+                        disabled={isLoading}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="login-password">Password</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                      <Input
+                        id="login-password"
+                        type="password"
+                        placeholder="••••••••"
+                        className="pl-11"
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        required
+                        disabled={isLoading}
+                      />
+                    </div>
+                  </div>
+
+                  <Button type="submit" variant="admin" size="lg" className="w-full" disabled={isLoading}>
+                    {isLoading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
+                    Proceed to OTP
+                  </Button>
+                </form>
+              ) : (
+                <form onSubmit={handleVerifyOTP} className="space-y-4 animate-slide-up">
+                  <div className="space-y-2">
+                    <Label htmlFor="otp">Enter OTP</Label>
                     <Input
-                      id="login-email"
-                      type="email"
-                      placeholder="admin@college.edu"
-                      className="pl-11"
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
+                      id="otp"
+                      type="text"
+                      placeholder="6-digit OTP"
+                      className="text-center text-lg tracking-widest"
+                      maxLength={6}
+                      value={enteredOtp}
+                      onChange={(e) => setEnteredOtp(e.target.value.replace(/\D/g, ''))}
                       required
+                      disabled={isLoading}
+                      autoFocus
                     />
                   </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="login-password">Password</Label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                    <Input
-                      id="login-password"
-                      type="password"
-                      placeholder="••••••••"
-                      className="pl-11"
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
-                      required
-                    />
+                  <div className="flex gap-4">
+                    <Button type="button" variant="outline" className="w-full" onClick={() => setShowOtpForm(false)} disabled={isLoading}>
+                      Back
+                    </Button>
+                    <Button type="submit" variant="admin" size="lg" className="w-full" disabled={isLoading || enteredOtp.length !== 6}>
+                      {isLoading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
+                      Verify & Login
+                    </Button>
                   </div>
-                </div>
-
-                <Button type="submit" variant="admin" size="lg" className="w-full" disabled={isLoading}>
-                  {isLoading ? 'Signing in...' : 'Sign In'}
-                </Button>
-              </form>
+                </form>
+              )}
             </TabsContent>
 
             {/* Sign Up Tab */}
             <TabsContent value="signup">
-              <form onSubmit={handleSignUp} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="college-name">College Name</Label>
-                    <div className="relative">
-                      <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                      <Input
-                        id="college-name"
-                        placeholder="ABC Engineering"
-                        className="pl-11"
-                        value={collegeName}
-                        onChange={(e) => setCollegeName(e.target.value)}
-                        required
-                      />
-                    </div>
-                  </div>
+              {!showSignupForm && (
+                <div className="space-y-4 animate-fade-in">
+                  <InstitutionSelector mode="registration" onInstitutionSelected={setSelectedInstitution} disabled={isLoading} />
 
-                  <div className="space-y-2">
-                    <Label htmlFor="college-code">Code</Label>
-                    <div className="relative">
-                      <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                      <Input
-                        id="college-code"
-                        placeholder="ABC"
-                        className="pl-11"
-                        value={collegeCode}
-                        onChange={(e) => setCollegeCode(e.target.value.toUpperCase())}
-                        maxLength={5}
-                        required
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="location">Location</Label>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                    <Input
-                      id="location"
-                      placeholder="City, State"
-                      className="pl-11"
-                      value={location}
-                      onChange={(e) => setLocation(e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Official Email</Label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                      <Input
-                        id="email"
-                        type="email"
-                        placeholder="admin@college.edu"
-                        className="pl-11"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Password</Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                      <Input
-                        id="password"
-                        type="password"
-                        placeholder="••••••••"
-                        className="pl-11"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="blocks">Number of Blocks</Label>
-                  <Input
-                    id="blocks"
-                    type="number"
-                    placeholder="10"
-                    value={blocks}
-                    onChange={(e) => setBlocks(e.target.value)}
-                    min="1"
-                    required
-                  />
-                </div>
-
-                {/* Branches */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label>Branches</Label>
-                    <Button type="button" variant="ghost" size="sm" onClick={addBranch}>
-                      <Plus className="w-4 h-4 mr-1" /> Add Branch
+                  {selectedInstitution && (
+                    <Button
+                      type="button"
+                      variant="admin"
+                      size="lg"
+                      className="w-full mt-4 animate-slide-up"
+                      onClick={() => setShowSignupForm(true)}
+                    >
+                      Continue with College
                     </Button>
+                  )}
+                </div>
+              )}
+
+              {showSignupForm && selectedInstitution && (
+                <form onSubmit={handleSignUp} className="space-y-4 animate-slide-up mt-4">
+
+                  {/* Basic Data Read-only */}
+                  <div className="p-4 bg-muted/50 rounded-xl space-y-2 border border-border">
+                    <div className="flex items-center gap-2 text-primary font-medium">
+                      <Building2 className="w-4 h-4" />
+                      {selectedInstitution.name}
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <MapPin className="w-4 h-4" />
+                      {selectedInstitution.district}, {selectedInstitution.state}
+                    </div>
+                    {selectedInstitution.university && (
+                      <div className="text-sm text-muted-foreground mt-2 border-t border-border/50 pt-2">
+                        Affiliated to: {selectedInstitution.university}
+                      </div>
+                    )}
                   </div>
 
-                  {branches.map((branch, index) => (
-                    <div key={index} className="flex gap-2 items-center">
-                      <div className="relative flex-1">
-                        <GitBranch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <div className="grid gap-4 mt-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="email">Official Admin Email</Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                         <Input
-                          placeholder="Branch Name"
-                          className="pl-10"
-                          value={branch.name}
-                          onChange={(e) => updateBranch(index, 'name', e.target.value)}
+                          id="email"
+                          type="email"
+                          placeholder="admin@college.edu"
+                          className="pl-11"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
                           required
+                          disabled={isLoading}
                         />
                       </div>
-                      <Input
-                        placeholder="Code"
-                        className="w-24"
-                        value={branch.code}
-                        onChange={(e) => updateBranch(index, 'code', e.target.value.toUpperCase())}
-                        maxLength={4}
-                        required
-                      />
-                      {branches.length > 1 && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeBranch(index)}
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
-                      )}
                     </div>
-                  ))}
-                </div>
 
-                <Button type="submit" variant="admin" size="lg" className="w-full" disabled={isLoading}>
-                  {isLoading ? 'Registering...' : 'Register College'}
-                </Button>
-              </form>
+                    <div className="space-y-2">
+                      <Label htmlFor="password">Password</Label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                        <Input
+                          id="password"
+                          type="password"
+                          placeholder="••••••••"
+                          className="pl-11"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          required
+                          disabled={isLoading}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="confirm-password">Re-enter Password</Label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                        <Input
+                          id="confirm-password"
+                          type="password"
+                          placeholder="••••••••"
+                          className="pl-11"
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          required
+                          disabled={isLoading}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4 pt-4">
+                    <Button type="button" variant="outline" className="w-full" onClick={() => setShowSignupForm(false)} disabled={isLoading}>
+                      Change College
+                    </Button>
+                    <Button type="submit" variant="admin" size="lg" className="w-full" disabled={isLoading}>
+                      {isLoading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
+                      Register Account
+                    </Button>
+                  </div>
+                </form>
+              )}
             </TabsContent>
           </Tabs>
         </div>
