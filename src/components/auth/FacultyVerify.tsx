@@ -48,7 +48,7 @@ export const FacultyVerify: React.FC = () => {
 
     try {
       // 1. Verify if Faculty ID exists (simulated check here for demo, can be queried from DB)
-      let isValidId = facultyId.startsWith('FAC');
+      const isValidId = facultyId.startsWith('FAC');
       if (!isValidId) {
         throw new Error('Invalid Faculty ID format. Must start with FAC.');
       }

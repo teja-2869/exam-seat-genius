@@ -184,7 +184,7 @@ export const AdminAuth: React.FC = () => {
       const user = userDoc.data() as any;
 
       const collegeDoc = await getDoc(doc(db, 'institutions', user.institutionId));
-      let college = collegeDoc.exists() ? collegeDoc.data() : { id: user.institutionId, name: user.institutionName };
+      const college = collegeDoc.exists() ? collegeDoc.data() : { id: user.institutionId, name: user.institutionName };
 
       login(user, college as any);
       toast({
