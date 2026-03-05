@@ -10,7 +10,12 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminGenerateSeating from "./pages/AdminGenerateSeating";
+import AdminBlocks from "./pages/admin/AdminBlocks";
+import AdminBranches from "./pages/admin/AdminBranches";
+import AdminFacultyControl from "./pages/admin/AdminFacultyControl";
+import AdminStudentsControl from "./pages/admin/AdminStudentsControl";
 import HODDashboard from "./pages/HODDashboard";
+import HODLayoutBuilderPage from "./pages/HODLayoutBuilder";
 import FacultyDashboard from "./pages/FacultyDashboard";
 import StudentDashboard from "@/components/student/StudentDashboard";
 import StudentSeatView from "@/components/student/StudentSeatView";
@@ -39,11 +44,16 @@ const App = () => (
             {/* Admin Routes */}
             <Route path="/admin/auth" element={<AdminAuth />} />
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
+            <Route path="/admin/rooms" element={<AdminBlocks />} />
+            <Route path="/admin/branches" element={<AdminBranches />} />
+            <Route path="/admin/faculty" element={<AdminFacultyControl />} />
+            <Route path="/admin/students" element={<AdminStudentsControl />} />
             <Route path="/admin-generate-seating" element={<AdminGenerateSeating />} />
 
             {/* HOD Routes */}
             <Route path="/hod/auth" element={<HODAuth />} />
             <Route path="/hod/dashboard" element={<HODDashboard />} />
+            <Route path="/hod/classrooms/layout" element={<HODLayoutBuilderPage />} />
 
             {/* Faculty Routes */}
             <Route path="/faculty/verify" element={<FacultyVerify />} />

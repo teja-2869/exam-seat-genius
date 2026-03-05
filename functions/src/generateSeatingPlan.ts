@@ -28,8 +28,8 @@ export const generateSeatingPlan = functions.https.onCall(async (requestOrData: 
     }
 
     // 2. Extract context mappings safely
-    const { examId, roomId, students } = data;
-    if (!examId || !roomId || !students || students.length === 0) {
+    const { examId, roomId, students, classroomLayout } = data;
+    if (!examId || !roomId || !students || students.length === 0 || !classroomLayout) {
         throw new functions.https.HttpsError("invalid-argument", "Missing required seating parameters.");
     }
 
@@ -45,28 +45,53 @@ export const generateSeatingPlan = functions.https.onCall(async (requestOrData: 
 
     // 4. Secure Backend Execution
     const prompt = `
-    You are an expert exam coordinator. 
-    Generate a JSON seating plan for ${students.length} students in room ${roomId}. 
-    Students: ${JSON.stringify(students)}
-    Rules:
-    - Do not place students from the same branch adjacently.
-    - Format output strictly as JSON.
-    - Return a JSON object with an array 'arrangements' containing seat mappings.
-  `;
+    You are an expert exam coordinator AI. 
+    Task: Generate a seating plan for ${students.length} students in room ${roomId}.
+    
+    Classroom Details:
+    ${JSON.stringify(classroomLayout)}
+    
+    Eligible Students List:
+    ${JSON.stringify(students)}
+    
+    Constraints & Rules:
+    1. Each bench element has 'row' and 'column'. A bench holds 2 seats: Left and Right.
+    2. Do NOT place students from the same branch beside each other on the same bench.
+    3. Do NOT place students with consecutive/sequential roll numbers beside each other.
+    4. Fill the seats optimally and evenly.
+    5. Return output STRICTLY as a raw JSON structure matching this TS Interface:
+    {
+      "seatingPlan": [
+         {
+           "row": number,
+           "column": number,
+           "leftSeat": { "studentId": string, "rollNumber": string } | null,
+           "rightSeat": { "studentId": string, "rollNumber": string } | null
+         }
+      ]
+    }
+    No markdown blocks, only JSON.
+    `;
 
     try {
         const result = await model.generateContent(prompt);
-        const textResponse = result.response.text();
+        let textResponse = result.response.text();
+
+        // Strip markdown if AI unexpectedly includes it
+        if (textResponse.startsWith('\`\`\`json')) {
+            textResponse = textResponse.replace(/\`\`\`json/g, '').replace(/\`\`\`/g, '').trim();
+        }
+
         const seatingJson = JSON.parse(textResponse);
 
-        // 5. Store directly on Backend before returning to mitigate network loss
+        // 5. Store directly on Backend before returning
         await admin.firestore()
             .collection("seatingPlans")
             .add({
                 institutionId,
                 examId,
-                roomId,
-                plan: seatingJson,
+                classroomId: roomId,
+                seatingPlan: seatingJson.seatingPlan || [],
                 generatedAt: admin.firestore.FieldValue.serverTimestamp(),
                 generatedBy: auth.uid
             });

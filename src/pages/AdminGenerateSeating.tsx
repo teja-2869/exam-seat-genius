@@ -16,7 +16,9 @@ import { Label } from '@/components/ui/label';
 
 import { functions, db } from '@/lib/firebase';
 import { httpsCallable } from 'firebase/functions';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
+import { ClassroomRenderer } from '@/components/classroom/ClassroomRenderer';
+import { Classroom, SeatingPlanLayout } from '@/types';
 
 // Types aligned with SaaS schema
 export interface Student {
@@ -65,7 +67,25 @@ const AdminGenerateSeating: React.FC = () => {
 
   // Temporary placeholders until we build full Firestore Exam/Room managers
   const mockExams = [{ id: 'ex1', name: 'CS301 - Data Structures' }, { id: 'ex2', name: 'EE201 - Circuits' }];
-  const mockRooms = [{ id: '101', name: 'Main Hall', capacity: 40 }, { id: '102', name: 'Lab 1', capacity: 40 }];
+
+  const [classrooms, setClassrooms] = useState<Classroom[]>([]);
+  const [activeClassroomLayout, setActiveClassroomLayout] = useState<Classroom | null>(null);
+
+  React.useEffect(() => {
+    const fetchClassrooms = async () => {
+      let institutionId = college?.id || (college as any)?.institutionId;
+      if (!institutionId) return;
+      try {
+        const classroomQuery = query(collection(db, 'classrooms'), where('institutionId', '==', institutionId));
+        const snapshot = await getDocs(classroomQuery);
+        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Classroom);
+        setClassrooms(data);
+      } catch (err) {
+        console.error("Failed to fetch classrooms", err);
+      }
+    };
+    fetchClassrooms();
+  }, [college]);
 
   const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     // Note: Excel Parser was deleted for the SaaS rewrite to enforce robust backend uploading in V2.
@@ -103,6 +123,27 @@ const AdminGenerateSeating: React.FC = () => {
       const examStudents = students.filter(student => student.exam === selectedExam);
       if (examStudents.length === 0) throw new Error(`No students loaded for ${selectedExam}`);
 
+      setProgress(20);
+
+      let institutionId = college?.id || (college as any)?.institutionId;
+      if (!institutionId) {
+        throw new Error("Authentication missing. Please reconnect to an institution.");
+      }
+
+      // 1. Fetch Classroom Structure from DB dynamically
+      const classroomQuery = query(collection(db, 'classrooms'),
+        where('institutionId', '==', institutionId),
+        where('roomNumber', '==', selectedRoom)
+      );
+
+      const classroomDocs = await getDocs(classroomQuery);
+      if (classroomDocs.empty) {
+        throw new Error(`Classroom structure not found for Room ${selectedRoom}. HOD must configure it first.`);
+      }
+
+      const classroomData = classroomDocs.docs[0].data() as Classroom;
+      setActiveClassroomLayout(classroomData);
+
       // Call Secure Cloud Function instead of Frontend Gemini Instance
       setProgress(40);
       const generateFunction = httpsCallable(functions, 'generateSeatingPlan');
@@ -110,7 +151,8 @@ const AdminGenerateSeating: React.FC = () => {
       const response = await generateFunction({
         examId: selectedExam,
         roomId: selectedRoom,
-        students: examStudents
+        students: examStudents,
+        classroomLayout: classroomData
       });
 
       setProgress(80);
@@ -118,7 +160,7 @@ const AdminGenerateSeating: React.FC = () => {
       const resultData = response.data as any;
       if (!resultData.success) throw new Error("Cloud Function returned failure.");
 
-      const arrangements = resultData.seatingJson?.arrangements;
+      const arrangements = resultData.seatingJson?.seatingPlan;
       if (!arrangements) throw new Error("Invalid format returned from AI generation.");
 
       setSeatingArrangements(arrangements);
@@ -230,8 +272,8 @@ const AdminGenerateSeating: React.FC = () => {
                   <Select value={selectedRoom} onValueChange={setSelectedRoom}>
                     <SelectTrigger><SelectValue placeholder="Choose room..." /></SelectTrigger>
                     <SelectContent>
-                      {mockRooms.map((room) => (
-                        <SelectItem key={room.id} value={room.id}><span className="mr-2">{room.name}</span> (Cap: {room.capacity})</SelectItem>
+                      {classrooms.map((room) => (
+                        <SelectItem key={room.id} value={room.roomNumber}><span className="mr-2">Room {room.roomNumber}</span> (Capacity: {room.rows * room.columns * 2})</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -279,21 +321,16 @@ const AdminGenerateSeating: React.FC = () => {
             </Card>
           )}
 
-          {showResults && seatingArrangements.length > 0 && (
-            <Card className="dashboard-card">
+          {showResults && seatingArrangements.length > 0 && activeClassroomLayout && (
+            <Card className="dashboard-card animate-slide-up overflow-hidden">
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle className="flex gap-3"><Eye className="w-5 h-5 text-primary" /> Generated Map</CardTitle>
-                  <Button variant="admin" size="sm" onClick={saveToFirebase}><Save className="w-4 h-4 mr-2" /> Save to Cloud</Button>
+                  <CardTitle className="flex gap-3"><Eye className="w-5 h-5 text-primary" /> Generated Seating Arrangement</CardTitle>
+                  <Button variant="admin" size="sm" onClick={saveToFirebase}><Save className="w-4 h-4 mr-2" /> Save to Firestore</Button>
                 </div>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <p className="text-muted-foreground">The seating generated from the cloud backend successfully returned {seatingArrangements.length} arrangement node(s).</p>
-                  <pre className="bg-muted p-4 rounded-md text-xs overflow-auto max-h-[400px]">
-                    {JSON.stringify(seatingArrangements, null, 2)}
-                  </pre>
-                </div>
+              <CardContent className="overflow-auto bg-gray-50 border-t p-0 md:p-6">
+                <ClassroomRenderer layout={activeClassroomLayout} seatingPlan={seatingArrangements as any} />
               </CardContent>
             </Card>
           )}

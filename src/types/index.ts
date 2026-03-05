@@ -44,15 +44,25 @@ export interface Faculty {
   collegeId: string;
 }
 
+export interface BenchStructure {
+  row: number;
+  column: number;
+  seatLeft: { seatId: string };
+  seatRight: { seatId: string };
+}
+
 export interface Classroom {
   id: string;
-  name: string;
-  block: string;
-  floor: number;
+  institutionId: string;
+  branch?: string;
+  floorNumber: number | string;
+  roomNumber: string;
   rows: number;
-  seatsPerRow: number;
-  totalSeats: number;
-  collegeId: string;
+  columns: number;
+  boardPosition: 'top' | 'bottom' | 'left' | 'right';
+  doorPosition: 'left' | 'right' | 'front' | 'back';
+  benchStructure: BenchStructure[];
+  createdAt: any;
 }
 
 export interface Exam {
@@ -74,11 +84,27 @@ export interface SeatingArrangement {
   id: string;
   examId: string;
   classroomId: string;
-  seatNumber: number;
+  seatNumber: string;
   row: number;
   column: number;
   studentId: string;
   attendance?: 'present' | 'absent';
+}
+
+export interface SeatingPlanLayout {
+  row: number;
+  column: number;
+  leftSeat: { studentId: string; rollNumber: string } | null;
+  rightSeat: { studentId: string; rollNumber: string } | null;
+}
+
+export interface SeatingPlan {
+  id: string;
+  institutionId: string;
+  examId: string;
+  classroomId: string;
+  seatingPlan: SeatingPlanLayout[];
+  generatedAt: any;
 }
 
 export interface Invigilation {
