@@ -81,10 +81,11 @@ export default function AdminBranches() {
             });
 
             setShowDialog(false);
+            toast.success('Branch and HOD created successfully');
             fetchBranches();
         } catch (err: any) {
             console.error(err);
-            alert(err.message || 'Failed to register HOD and Branch');
+            toast.error(err.message || 'Failed to register HOD and Branch');
         }
     };
 
