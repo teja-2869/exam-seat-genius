@@ -80,10 +80,11 @@ export default function AdminFacultyControl() {
             });
 
             setShowDialog(false);
+            toast.success('Faculty member inducted successfully');
             fetchFaculty();
         } catch (err: any) {
             console.error(err);
-            alert(err.message || 'Failed to onboard Faculty member');
+            toast.error(err.message || 'Failed to onboard Faculty member');
         }
     };
 
