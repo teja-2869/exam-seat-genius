@@ -22,7 +22,8 @@ export default function FacultyPastDuties() {
                     getDocs(query(collection(db, 'invigilation'), where('facultyId', '==', user.id))),
                     getDocs(query(collection(db, 'exams'), where('institutionId', '==', institutionId)))
                 ]);
-                setDuties(dSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(d => d.status === 'completed'));
+                const allDuties: any[] = dSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                setDuties(allDuties.filter(d => d.status === 'completed'));
                 setExams(eSnap.docs.map(d => ({ id: d.id, ...d.data() })));
             } catch (err) { console.error(err); }
             setLoading(false);

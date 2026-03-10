@@ -18,9 +18,8 @@ export default function StudentSeatViewPage() {
             if (!institutionId) { setLoading(false); return; }
             try {
                 const snap = await getDocs(query(collection(db, 'seatingPlans'), where('institutionId', '==', institutionId)));
-                const allPlans = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                // Filter plans that contain this student
-                const myPlans = allPlans.filter(p =>
+                const allPlans: any[] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                const myPlans = allPlans.filter((p: any) =>
                     p.seatingPlan?.some((seat: any) =>
                         seat.leftSeat?.studentId === user?.id || seat.rightSeat?.studentId === user?.id
                     )

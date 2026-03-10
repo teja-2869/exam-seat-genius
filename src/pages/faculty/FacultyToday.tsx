@@ -24,11 +24,11 @@ export default function FacultyToday() {
                     getDocs(query(collection(db, 'invigilation'), where('facultyId', '==', user.id))),
                     getDocs(query(collection(db, 'exams'), where('institutionId', '==', institutionId)))
                 ]);
-                const allDuties = dSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-                const allExams = eSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                const allDuties: any[] = dSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                const allExams: any[] = eSnap.docs.map(d => ({ id: d.id, ...d.data() }));
                 setExams(allExams);
-                const todayDuties = allDuties.filter(d => {
-                    const exam = allExams.find(e => e.id === d.examId);
+                const todayDuties = allDuties.filter((d: any) => {
+                    const exam = allExams.find((e: any) => e.id === d.examId);
                     return exam?.date === today;
                 });
                 setDuties(todayDuties);
