@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, setDoc, doc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+import { toast } from 'sonner';
 
 export default function AdminFacultyControl() {
     const { college, user } = useAuth();
