@@ -10,6 +10,7 @@ import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, updateDoc, doc, limit } from 'firebase/firestore';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { toast } from 'sonner';
 
 export default function AdminStudentsControl() {
     const { college, user } = useAuth();
