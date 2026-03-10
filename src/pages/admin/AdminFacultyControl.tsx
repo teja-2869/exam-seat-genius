@@ -93,9 +93,11 @@ export default function AdminFacultyControl() {
         try {
             await deleteDoc(doc(db, 'users', showConfirmDelete));
             setShowConfirmDelete(null);
+            toast.success('Faculty member dismissed');
             fetchFaculty();
         } catch (err) {
             console.error(err);
+            toast.error('Failed to delete');
         }
     };
 

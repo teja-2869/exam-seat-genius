@@ -94,9 +94,11 @@ export default function AdminBranches() {
         try {
             await deleteDoc(doc(db, 'branches', showConfirmDelete));
             setShowConfirmDelete(null);
+            toast.success('Branch deleted');
             fetchBranches();
         } catch (err) {
             console.error(err);
+            toast.error('Failed to delete branch');
         }
     };
 

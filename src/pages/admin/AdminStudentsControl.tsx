@@ -45,6 +45,7 @@ export default function AdminStudentsControl() {
         try {
             let newStatus = currentStatus === 'Active' ? 'Detained' : 'Active';
             await updateDoc(doc(db, 'students', studentId), { academicStatus: newStatus });
+            toast.success(`Student ${newStatus === 'Detained' ? 'detained' : 're-inducted'}`);
             fetchStudents();
         } catch (err) {
             console.error(err);
