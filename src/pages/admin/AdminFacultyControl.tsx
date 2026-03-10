@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, setDoc, doc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+import { toast } from 'sonner';
 
 export default function AdminFacultyControl() {
     const { college, user } = useAuth();
@@ -79,10 +80,11 @@ export default function AdminFacultyControl() {
             });
 
             setShowDialog(false);
+            toast.success('Faculty member inducted successfully');
             fetchFaculty();
         } catch (err: any) {
             console.error(err);
-            alert(err.message || 'Failed to onboard Faculty member');
+            toast.error(err.message || 'Failed to onboard Faculty member');
         }
     };
 
@@ -91,9 +93,11 @@ export default function AdminFacultyControl() {
         try {
             await deleteDoc(doc(db, 'users', showConfirmDelete));
             setShowConfirmDelete(null);
+            toast.success('Faculty member dismissed');
             fetchFaculty();
         } catch (err) {
             console.error(err);
+            toast.error('Failed to delete');
         }
     };
 
