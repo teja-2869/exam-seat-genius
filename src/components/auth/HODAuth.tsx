@@ -87,7 +87,7 @@ export const HODAuth: React.FC = () => {
         title: 'Registration Successful',
         description: 'Your HOD account for ' + selectedInstitution.name + ' has been created.',
       });
-      navigate('/hod/dashboard');
+      navigate('/hod/dashboard', { replace: true });
     } catch (error: any) {
       console.error(error);
       toast({
