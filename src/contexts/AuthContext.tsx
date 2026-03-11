@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { UserRole, User, College } from '@/types';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
@@ -12,6 +12,7 @@ interface AuthContextType {
   login: (user: User, college: College) => void;
   logout: () => void;
   setCurrentRole: (role: UserRole) => void;
+  suppressAutoLogin: React.MutableRefObject<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -21,10 +22,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [college, setCollege] = useState<College | null>(null);
   const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
+  const suppressAutoLogin = useRef(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
+      if (firebaseUser && !suppressAutoLogin.current) {
         try {
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           if (userDoc.exists()) {
@@ -45,11 +47,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch (error) {
           console.error("Error fetching user data:", error);
         }
-      } else {
-        // Only clear if auth state actually changes to null
-        // Keep current state if we manually set it without firebase password auth (like faculty pseudo-login)
-        // Wait, if it's faculty pseudo-login, there's no firebaseUser, so it evaluates here immediately on mount.
-        // It's safe to not clear user if firebaseUser is null on mount, we'll let `login` set it.
+      } else if (!firebaseUser && !suppressAutoLogin.current) {
+        // Firebase signed out and we're not in OTP flow — clear state
       }
       setLoading(false);
     });
@@ -58,6 +57,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = useCallback((user: User, college: College) => {
+    suppressAutoLogin.current = false;
     setUser(user);
     setCollege(college);
     setCurrentRole(user.role);
@@ -71,6 +71,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(null);
       setCollege(null);
       setCurrentRole(null);
+      sessionStorage.clear();
     } catch (error) {
       console.error("Error signing out:", error);
     }
@@ -90,6 +91,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         logout,
         setCurrentRole,
+        suppressAutoLogin,
       }}
     >
       {children}
