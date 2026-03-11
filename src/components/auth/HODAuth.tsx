@@ -15,7 +15,7 @@ import emailjs from '@emailjs/browser';
 
 export const HODAuth: React.FC = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, suppressAutoLogin } = useAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -105,6 +105,9 @@ export const HODAuth: React.FC = () => {
     setIsLoading(true);
 
     try {
+      // Suppress auto-login from onAuthStateChanged during OTP flow
+      suppressAutoLogin.current = true;
+
       // 1. Verify credentials by attempting a hidden signin
       await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
 
