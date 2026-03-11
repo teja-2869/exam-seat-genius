@@ -105,6 +105,9 @@ export const AdminAuth: React.FC = () => {
     setIsLoading(true);
 
     try {
+      // Suppress auto-login from onAuthStateChanged during OTP flow
+      suppressAutoLogin.current = true;
+
       // 1. Verify credentials by attempting a hidden signin
       await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
 
