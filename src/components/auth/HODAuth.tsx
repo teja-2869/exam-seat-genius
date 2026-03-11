@@ -189,7 +189,7 @@ export const HODAuth: React.FC = () => {
         title: 'Login Successful',
         description: 'Welcome back!',
       });
-      navigate('/hod/dashboard');
+      navigate('/hod/dashboard', { replace: true });
     } catch (error: any) {
       toast({
         title: 'OTP Verification Failed',

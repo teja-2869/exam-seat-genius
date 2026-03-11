@@ -191,7 +191,7 @@ export const AdminAuth: React.FC = () => {
         title: 'Login Successful',
         description: 'Welcome to the Admin Dashboard.',
       });
-      navigate('/admin/dashboard');
+      navigate('/admin/dashboard', { replace: true });
     } catch (error: any) {
       toast({
         title: 'OTP Verification Failed',

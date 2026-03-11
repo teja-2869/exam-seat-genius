@@ -128,7 +128,7 @@ export const FacultyVerify: React.FC = () => {
           title: 'Verification Successful',
           description: 'Welcome! Redirecting to your dashboard.',
         });
-        navigate('/faculty/dashboard');
+        navigate('/faculty/dashboard', { replace: true });
       }, 1000);
 
     } catch (err: any) {
