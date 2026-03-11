@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import { PanelCard } from '@/components/panels/PanelCard';
 import { Header } from '@/components/layout/Header';
 import { ShieldCheck, Users, GraduationCap, BookOpen, Sparkles } from 'lucide-react';
@@ -35,6 +37,17 @@ const panels = [
 ];
 
 const Index = () => {
+  const navigate = useNavigate();
+  const { isAuthenticated, currentRole } = useAuth();
+
+  useEffect(() => {
+    if (isAuthenticated && currentRole) {
+      if (currentRole.toLowerCase() === 'admin') navigate('/admin/dashboard', { replace: true });
+      else if (currentRole.toLowerCase() === 'hod') navigate('/hod/dashboard', { replace: true });
+      else if (currentRole.toLowerCase() === 'faculty') navigate('/faculty/dashboard', { replace: true });
+      else if (currentRole.toLowerCase() === 'student') navigate('/student/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, currentRole, navigate]);
   return (
     <div className="min-h-screen bg-background">
       <Header />

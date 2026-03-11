@@ -12,7 +12,16 @@ import { InstitutionSelector } from '@/features/institution/InstitutionSelector'
 
 export const FacultyVerify: React.FC = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, isAuthenticated, currentRole } = useAuth();
+
+  useEffect(() => {
+    if (isAuthenticated && currentRole) {
+      if (currentRole.toLowerCase() === 'admin') navigate('/admin/dashboard', { replace: true });
+      else if (currentRole.toLowerCase() === 'hod') navigate('/hod/dashboard', { replace: true });
+      else if (currentRole.toLowerCase() === 'faculty') navigate('/faculty/dashboard', { replace: true });
+      else if (currentRole.toLowerCase() === 'student') navigate('/student/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, currentRole, navigate]);
   const { toast } = useToast();
 
   const [selectedInstitution, setSelectedInstitution] = useState<any>(null);
@@ -128,7 +137,7 @@ export const FacultyVerify: React.FC = () => {
           title: 'Verification Successful',
           description: 'Welcome! Redirecting to your dashboard.',
         });
-        navigate('/faculty/dashboard');
+        navigate('/faculty/dashboard', { replace: true });
       }, 1000);
 
     } catch (err: any) {
