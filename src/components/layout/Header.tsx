@@ -16,8 +16,21 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
   const { isAuthenticated, user, logout, college } = useAuth();
 
   const handleLogout = () => {
+    sessionStorage.clear();
     logout();
-    navigate('/');
+    navigate('/', { replace: true });
+  };
+
+  const getDashboardRoute = () => {
+    if (!isAuthenticated || !user) return '/';
+    const role = user.role?.toLowerCase();
+    const map: Record<string, string> = {
+      admin: '/admin/dashboard',
+      hod: '/hod/dashboard',
+      faculty: '/faculty/dashboard',
+      student: '/student/dashboard',
+    };
+    return map[role] || '/';
   };
 
   return (
