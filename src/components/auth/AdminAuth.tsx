@@ -15,7 +15,7 @@ import emailjs from '@emailjs/browser';
 
 export const AdminAuth: React.FC = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, suppressAutoLogin } = useAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
