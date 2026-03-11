@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,16 +12,7 @@ import { User } from '@/types';
 export const StudentVerify: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { login, isAuthenticated, currentRole } = useAuth();
-
-  useEffect(() => {
-    if (isAuthenticated && currentRole) {
-      if (currentRole.toLowerCase() === 'admin') navigate('/admin/dashboard', { replace: true });
-      else if (currentRole.toLowerCase() === 'hod') navigate('/hod/dashboard', { replace: true });
-      else if (currentRole.toLowerCase() === 'faculty') navigate('/faculty/dashboard', { replace: true });
-      else if (currentRole.toLowerCase() === 'student') navigate('/student/dashboard', { replace: true });
-    }
-  }, [isAuthenticated, currentRole, navigate]);
+  const { login } = useAuth();
 
   const [selectedInstitution, setSelectedInstitution] = useState<any>(null);
   const [isInstitutionConfirmed, setIsInstitutionConfirmed] = useState(false);
@@ -76,7 +67,7 @@ export const StudentVerify: React.FC = () => {
           title: 'Verification Successful',
           description: 'Welcome to your student dashboard.',
         });
-        navigate('/student/dashboard', { replace: true });
+        navigate('/student/dashboard');
       }, 1000);
     } else {
       setVerificationStatus('error');

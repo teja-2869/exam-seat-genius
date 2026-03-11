@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,16 +15,7 @@ import emailjs from '@emailjs/browser';
 
 export const AdminAuth: React.FC = () => {
   const navigate = useNavigate();
-  const { login, isAuthenticated, currentRole } = useAuth();
-
-  useEffect(() => {
-    if (isAuthenticated && currentRole) {
-      if (currentRole.toLowerCase() === 'admin') navigate('/admin/dashboard', { replace: true });
-      else if (currentRole.toLowerCase() === 'hod') navigate('/hod/dashboard', { replace: true });
-      else if (currentRole.toLowerCase() === 'faculty') navigate('/faculty/dashboard', { replace: true });
-      else if (currentRole.toLowerCase() === 'student') navigate('/student/dashboard', { replace: true });
-    }
-  }, [isAuthenticated, currentRole, navigate]);
+  const { login } = useAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -96,7 +87,7 @@ export const AdminAuth: React.FC = () => {
         title: 'Registration Successful',
         description: 'Your admin account has secured access to ' + selectedInstitution.name,
       });
-      navigate('/admin/dashboard', { replace: true });
+      navigate('/admin/dashboard');
     } catch (error: any) {
       console.error(error);
       toast({
@@ -200,7 +191,7 @@ export const AdminAuth: React.FC = () => {
         title: 'Login Successful',
         description: 'Welcome to the Admin Dashboard.',
       });
-      navigate('/admin/dashboard', { replace: true });
+      navigate('/admin/dashboard');
     } catch (error: any) {
       toast({
         title: 'OTP Verification Failed',
