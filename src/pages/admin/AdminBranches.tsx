@@ -10,7 +10,6 @@ import { Label } from '@/components/ui/label';
 import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, addDoc, deleteDoc, doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, getAuth } from 'firebase/auth';
-import { toast } from 'sonner';
 
 export default function AdminBranches() {
     const { college, user } = useAuth();
@@ -81,11 +80,10 @@ export default function AdminBranches() {
             });
 
             setShowDialog(false);
-            toast.success('Branch and HOD created successfully');
             fetchBranches();
         } catch (err: any) {
             console.error(err);
-            toast.error(err.message || 'Failed to register HOD and Branch');
+            alert(err.message || 'Failed to register HOD and Branch');
         }
     };
 
@@ -94,11 +92,9 @@ export default function AdminBranches() {
         try {
             await deleteDoc(doc(db, 'branches', showConfirmDelete));
             setShowConfirmDelete(null);
-            toast.success('Branch deleted');
             fetchBranches();
         } catch (err) {
             console.error(err);
-            toast.error('Failed to delete branch');
         }
     };
 

@@ -10,7 +10,6 @@ import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, updateDoc, doc, limit } from 'firebase/firestore';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { toast } from 'sonner';
 
 export default function AdminStudentsControl() {
     const { college, user } = useAuth();
@@ -45,7 +44,6 @@ export default function AdminStudentsControl() {
         try {
             let newStatus = currentStatus === 'Active' ? 'Detained' : 'Active';
             await updateDoc(doc(db, 'students', studentId), { academicStatus: newStatus });
-            toast.success(`Student ${newStatus === 'Detained' ? 'detained' : 're-inducted'}`);
             fetchStudents();
         } catch (err) {
             console.error(err);
