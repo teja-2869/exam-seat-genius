@@ -67,7 +67,7 @@ export const StudentVerify: React.FC = () => {
           title: 'Verification Successful',
           description: 'Welcome to your student dashboard.',
         });
-        navigate('/student/dashboard');
+        navigate('/student/dashboard', { replace: true });
       }, 1000);
     } else {
       setVerificationStatus('error');

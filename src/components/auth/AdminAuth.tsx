@@ -87,7 +87,7 @@ export const AdminAuth: React.FC = () => {
         title: 'Registration Successful',
         description: 'Your admin account has secured access to ' + selectedInstitution.name,
       });
-      navigate('/admin/dashboard');
+      navigate('/admin/dashboard', { replace: true });
     } catch (error: any) {
       console.error(error);
       toast({
@@ -191,7 +191,7 @@ export const AdminAuth: React.FC = () => {
         title: 'Login Successful',
         description: 'Welcome to the Admin Dashboard.',
       });
-      navigate('/admin/dashboard');
+      navigate('/admin/dashboard', { replace: true });
     } catch (error: any) {
       toast({
         title: 'OTP Verification Failed',

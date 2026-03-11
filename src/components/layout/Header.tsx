@@ -16,8 +16,21 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
   const { isAuthenticated, user, logout, college } = useAuth();
 
   const handleLogout = () => {
+    sessionStorage.clear();
     logout();
-    navigate('/');
+    navigate('/', { replace: true });
+  };
+
+  const getDashboardRoute = () => {
+    if (!isAuthenticated || !user) return '/';
+    const role = user.role?.toLowerCase();
+    const map: Record<string, string> = {
+      admin: '/admin/dashboard',
+      hod: '/hod/dashboard',
+      faculty: '/faculty/dashboard',
+      student: '/student/dashboard',
+    };
+    return map[role] || '/';
   };
 
   return (
@@ -33,7 +46,7 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
 
           <div
             className="flex items-center gap-3 cursor-pointer"
-            onClick={() => navigate('/')}
+            onClick={() => navigate(getDashboardRoute())}
           >
             <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-md">
               <GraduationCap className="w-6 h-6 text-primary-foreground" />
