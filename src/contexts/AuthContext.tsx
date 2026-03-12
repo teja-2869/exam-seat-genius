@@ -86,6 +86,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCollege(null);
       setCurrentRole(null);
       sessionStorage.clear();
+      localStorage.removeItem('userSession');
     } catch (error) {
       console.error("Error signing out:", error);
     }
