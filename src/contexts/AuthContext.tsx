@@ -71,6 +71,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(user);
     setCollege(college);
     setCurrentRole(user.role);
+    // Persist session for non-Firebase auth roles (faculty/student)
+    if (user.role === 'faculty' || user.role === 'student') {
+      localStorage.setItem('userSession', JSON.stringify({ user, college }));
+    }
   }, []);
 
   const logout = useCallback(async () => {
