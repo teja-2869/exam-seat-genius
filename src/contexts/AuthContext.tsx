@@ -18,10 +18,20 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [college, setCollege] = useState<College | null>(null);
-  const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Restore persisted session for non-Firebase roles (faculty/student)
+  const getPersistedSession = (): { user: User; college: College } | null => {
+    try {
+      const raw = localStorage.getItem('userSession');
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return null;
+  };
+
+  const persisted = getPersistedSession();
+  const [user, setUser] = useState<User | null>(persisted?.user ?? null);
+  const [college, setCollege] = useState<College | null>(persisted?.college ?? null);
+  const [currentRole, setCurrentRole] = useState<UserRole | null>(persisted?.user?.role ?? null);
+  const [loading, setLoading] = useState(persisted ? false : true);
   const suppressAutoLogin = useRef(false);
 
   useEffect(() => {
@@ -61,6 +71,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(user);
     setCollege(college);
     setCurrentRole(user.role);
+    // Persist session for non-Firebase auth roles (faculty/student)
+    if (user.role === 'faculty' || user.role === 'student') {
+      localStorage.setItem('userSession', JSON.stringify({ user, college }));
+    }
   }, []);
 
   const logout = useCallback(async () => {
@@ -72,6 +86,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCollege(null);
       setCurrentRole(null);
       sessionStorage.clear();
+      localStorage.removeItem('userSession');
     } catch (error) {
       console.error("Error signing out:", error);
     }
