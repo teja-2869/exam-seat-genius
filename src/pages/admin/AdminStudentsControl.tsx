@@ -126,13 +126,13 @@ export default function AdminStudentsControl() {
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm text-left">
                                 <thead className="bg-muted/50 text-muted-foreground font-semibold border-b">
-                                    <tr>
-                                        <th className="px-6 py-4">Roll Number</th>
-                                        <th className="px-6 py-4">Student Name</th>
-                                        <th className="px-6 py-4">Branch & Yr</th>
-                                        <th className="px-6 py-4">Academic Status</th>
-                                        <th className="px-6 py-4 text-right">Overrides</th>
-                                    </tr>
+                                     <tr>
+                                         <th className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">Roll Number</th>
+                                         <th className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">Student Name</th>
+                                         <th className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">Branch & Yr</th>
+                                         <th className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">Academic Status</th>
+                                         <th className="px-3 sm:px-6 py-3 sm:py-4 text-right whitespace-nowrap">Overrides</th>
+                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border">
                                     {filteredStudents.map((student) => (
