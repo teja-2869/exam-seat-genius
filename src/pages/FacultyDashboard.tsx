@@ -19,7 +19,7 @@ const FacultyDashboard: React.FC = () => {
 
   return (
     <FacultyLayout>
-      <div className="max-w-7xl mx-auto space-y-8 animate-fade-in">
+      <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8 animate-fade-in">
 
         {/* Breadcrumb & Welcome Section */}
         <div>
