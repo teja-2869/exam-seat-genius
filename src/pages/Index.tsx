@@ -39,16 +39,16 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       <Header />
       
-      <main className="pt-24 pb-16 px-6">
+      <main className="pt-20 sm:pt-24 pb-12 sm:pb-16 px-4 sm:px-6">
         <div className="max-w-6xl mx-auto">
           {/* Hero Section */}
-          <div className="text-center mb-16 animate-fade-in">
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 rounded-full text-primary text-sm font-medium mb-6">
+          <div className="text-center mb-10 sm:mb-16 animate-fade-in">
+            <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 bg-primary/10 rounded-full text-primary text-xs sm:text-sm font-medium mb-4 sm:mb-6">
               <Sparkles className="w-4 h-4" />
               AI-Powered Examination Management
             </div>
             
-            <h1 className="text-4xl md:text-6xl font-display font-bold text-foreground mb-6">
+            <h1 className="text-3xl sm:text-4xl md:text-6xl font-display font-bold text-foreground mb-4 sm:mb-6">
               <span className="gradient-text">ExamSeat</span> Pro
             </h1>
             
