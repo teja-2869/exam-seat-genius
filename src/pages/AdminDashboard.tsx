@@ -123,7 +123,7 @@ const AdminDashboard: React.FC = () => {
 
   return (
     <AdminLayout>
-      <div className="max-w-7xl mx-auto space-y-8 animate-fade-in pb-12">
+      <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8 animate-fade-in pb-12">
         {/* Header Section */}
         <div>
           <div className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
@@ -131,7 +131,7 @@ const AdminDashboard: React.FC = () => {
             <span>/</span>
             <span className="text-foreground font-medium">Institutional Dashboard</span>
           </div>
-          <h1 className="text-3xl font-display font-bold text-foreground mb-2">
+          <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground mb-2">
             Institution Control Center
           </h1>
           <p className="text-muted-foreground flex items-center gap-2">
@@ -144,7 +144,7 @@ const AdminDashboard: React.FC = () => {
           <div className="h-40 flex items-center justify-center border rounded-xl"><Activity className="animate-spin text-primary" /></div>
         ) : (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
               <Card className="dashboard-card shadow-sm border-l-4 border-l-blue-500">
                 <CardContent className="p-4 flex flex-col justify-center">
                   <span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1">Total Blocks</span>
@@ -208,21 +208,21 @@ const AdminDashboard: React.FC = () => {
                   <CardTitle className="text-lg font-display text-foreground flex items-center gap-2"><Building2 className="w-5 h-5 text-primary" /> Institution Overview</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 p-3 bg-muted/50 rounded-lg">
                     <span className="text-sm font-medium text-muted-foreground">Institution Name</span>
-                    <span className="font-semibold">{college?.name || 'N/A'}</span>
+                    <span className="font-semibold text-sm sm:text-base truncate">{college?.name || 'N/A'}</span>
                   </div>
-                  <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 p-3 bg-muted/50 rounded-lg">
                     <span className="text-sm font-medium text-muted-foreground">Institution Code</span>
-                    <span className="font-semibold">{college?.code || 'N/A'}</span>
+                    <span className="font-semibold text-sm sm:text-base">{college?.code || 'N/A'}</span>
                   </div>
-                  <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 p-3 bg-muted/50 rounded-lg">
                     <span className="text-sm font-medium text-muted-foreground">Address / Location</span>
-                    <span className="font-semibold">{college?.location || 'N/A'}</span>
+                    <span className="font-semibold text-sm sm:text-base truncate">{college?.location || 'N/A'}</span>
                   </div>
-                  <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 p-3 bg-muted/50 rounded-lg">
                     <span className="text-sm font-medium text-muted-foreground">Contact Email</span>
-                    <span className="font-semibold">{college?.email || 'N/A'}</span>
+                    <span className="font-semibold text-sm sm:text-base truncate">{college?.email || 'N/A'}</span>
                   </div>
                   <div className="flex justify-between items-center p-3 bg-primary/10 border-primary/20 border rounded-lg">
                     <span className="text-sm font-bold text-primary">Total Infrastructure Capacity</span>

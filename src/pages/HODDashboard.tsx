@@ -185,7 +185,7 @@ const HODDashboard: React.FC = () => {
             <span>/</span>
             <span className="text-foreground font-medium">Dashboard</span>
           </div>
-          <h1 className="text-3xl font-display font-bold text-foreground mb-2">
+          <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground mb-2">
             Department Dashboard
           </h1>
           <p className="text-muted-foreground">
@@ -225,20 +225,20 @@ const HODDashboard: React.FC = () => {
                 {recentUploads.map((upload) => (
                   <div
                     key={upload.id}
-                    className="flex items-center justify-between p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
                     onClick={() => handleViewUploadDetails(upload)}
                   >
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-xl bg-secondary/10 flex items-center justify-center">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-secondary/10 flex items-center justify-center shrink-0">
                         <FileSpreadsheet className="w-5 h-5 text-secondary" />
                       </div>
-                      <div>
-                        <p className="font-semibold text-foreground">{upload.name}</p>
-                        <p className="text-sm text-muted-foreground">{upload.date} • {upload.department}</p>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-foreground text-sm truncate">{upload.name}</p>
+                        <p className="text-xs text-muted-foreground">{upload.date} • {upload.department}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
+                    <div className="flex items-center justify-between sm:justify-end gap-3 pl-13 sm:pl-0">
+                      <div className="text-left sm:text-right">
                         <p className="text-sm font-medium text-foreground">{upload.records} records</p>
                         <Badge variant={upload.status === 'Processed' ? 'default' : 'secondary'}>
                           {upload.status}
@@ -248,6 +248,7 @@ const HODDashboard: React.FC = () => {
                         <Button
                           variant="ghost"
                           size="icon"
+                          className="h-9 w-9"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleViewUploadDetails(upload);
@@ -258,6 +259,7 @@ const HODDashboard: React.FC = () => {
                         <Button
                           variant="ghost"
                           size="icon"
+                          className="h-9 w-9"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleDeleteUpload(upload.id);

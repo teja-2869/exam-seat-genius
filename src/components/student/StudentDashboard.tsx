@@ -31,7 +31,7 @@ export const StudentDashboard: React.FC = () => {
                         <span>/</span>
                         <span className="text-foreground font-medium">Dashboard</span>
                     </div>
-                    <h1 className="text-3xl font-display font-bold text-foreground mb-2">
+                    <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground mb-2">
                         Welcome, {user?.name || 'Student'}!
                     </h1>
                     <p className="text-muted-foreground">
@@ -46,7 +46,7 @@ export const StudentDashboard: React.FC = () => {
                             <div className="w-20 h-20 rounded-2xl bg-panel-student/10 flex items-center justify-center shrink-0 border border-panel-student/20">
                                 <GraduationCap className="w-10 h-10 text-panel-student" />
                             </div>
-                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 flex-1">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 flex-1">
                                 <div>
                                     <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Student Name</p>
                                     <p className="font-semibold text-lg text-foreground">{user?.name || 'Loading...'}</p>

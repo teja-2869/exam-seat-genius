@@ -70,19 +70,19 @@ export default function AdminStudentsControl() {
                         <div className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
                             <span>Admin</span><span>/</span><span>Academics</span><span>/</span><span className="text-foreground font-medium">Master Dataset</span>
                         </div>
-                        <h1 className="text-3xl font-display font-bold text-foreground mb-2">
+                        <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground mb-2">
                             Student Dataset Engine
                         </h1>
                         <p className="text-muted-foreground">
                             Govern global student visibility, filter ingestion batches, and secure generation locking.
                         </p>
                     </div>
-                    <div className="flex gap-3">
-                        <Button variant="outline"><UploadCloud className="w-4 h-4 mr-2" /> HOD Upload Requests</Button>
+                    <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                        <Button variant="outline" className="w-full sm:w-auto"><UploadCloud className="w-4 h-4 mr-2" /> HOD Upload Requests</Button>
                         {datasetLocked ? (
-                            <Button variant="destructive" disabled><Lock className="w-4 h-4 mr-2" /> Dataset Locked</Button>
+                            <Button variant="destructive" disabled className="w-full sm:w-auto"><Lock className="w-4 h-4 mr-2" /> Dataset Locked</Button>
                         ) : (
-                            <Button variant="destructive" onClick={() => setShowLockPrompt(true)}><ShieldAlert className="w-4 h-4 mr-2" /> Lock Seating Roster</Button>
+                            <Button variant="destructive" onClick={() => setShowLockPrompt(true)} className="w-full sm:w-auto"><ShieldAlert className="w-4 h-4 mr-2" /> Lock Seating Roster</Button>
                         )}
                     </div>
                 </div>
@@ -126,26 +126,26 @@ export default function AdminStudentsControl() {
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm text-left">
                                 <thead className="bg-muted/50 text-muted-foreground font-semibold border-b">
-                                    <tr>
-                                        <th className="px-6 py-4">Roll Number</th>
-                                        <th className="px-6 py-4">Student Name</th>
-                                        <th className="px-6 py-4">Branch & Yr</th>
-                                        <th className="px-6 py-4">Academic Status</th>
-                                        <th className="px-6 py-4 text-right">Overrides</th>
-                                    </tr>
+                                     <tr>
+                                         <th className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">Roll Number</th>
+                                         <th className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">Student Name</th>
+                                         <th className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">Branch & Yr</th>
+                                         <th className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">Academic Status</th>
+                                         <th className="px-3 sm:px-6 py-3 sm:py-4 text-right whitespace-nowrap">Overrides</th>
+                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border">
                                     {filteredStudents.map((student) => (
                                         <tr key={student.id} className="hover:bg-muted/20 transition-colors">
-                                            <td className="px-6 py-4 font-bold">{student.rollNumber || student.id.slice(0, 6).toUpperCase()}</td>
-                                            <td className="px-6 py-4">{student.name || 'Unnamed Record'}</td>
-                                            <td className="px-6 py-4 text-muted-foreground">{student.branch || 'None'} - Yr {student.year || 1}</td>
-                                            <td className="px-6 py-4">
+                                             <td className="px-3 sm:px-6 py-3 sm:py-4 font-bold whitespace-nowrap">{student.rollNumber || student.id.slice(0, 6).toUpperCase()}</td>
+                                             <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">{student.name || 'Unnamed Record'}</td>
+                                             <td className="px-3 sm:px-6 py-3 sm:py-4 text-muted-foreground whitespace-nowrap">{student.branch || 'None'} - Yr {student.year || 1}</td>
+                                             <td className="px-3 sm:px-6 py-3 sm:py-4">
                                                 <Badge variant={student.academicStatus === 'Active' || !student.academicStatus ? 'default' : 'destructive'} className="uppercase text-[10px] tracking-wider font-bold">
                                                     {student.academicStatus || 'Active'}
                                                 </Badge>
                                             </td>
-                                            <td className="px-6 py-4 text-right">
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 text-right whitespace-nowrap">
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"

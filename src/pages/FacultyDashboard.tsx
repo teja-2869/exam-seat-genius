@@ -19,7 +19,7 @@ const FacultyDashboard: React.FC = () => {
 
   return (
     <FacultyLayout>
-      <div className="max-w-7xl mx-auto space-y-8 animate-fade-in">
+      <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8 animate-fade-in">
 
         {/* Breadcrumb & Welcome Section */}
         <div>
@@ -28,7 +28,7 @@ const FacultyDashboard: React.FC = () => {
             <span>/</span>
             <span className="text-foreground font-medium">Dashboard</span>
           </div>
-          <h1 className="text-3xl font-display font-bold text-foreground mb-2">
+          <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground mb-2">
             Welcome, {user?.name || 'Faculty Member'}!
           </h1>
           <p className="text-muted-foreground">
@@ -48,7 +48,7 @@ const FacultyDashboard: React.FC = () => {
           </div>
 
           {/* Bottom/Right Section: Duty List */}
-          <div className="lg:col-span-2 animate-slide-up stagger-2 h-[500px]">
+          <div className="lg:col-span-2 animate-slide-up stagger-2 max-h-[500px]">
             <FacultyDutyList />
           </div>
 
