@@ -137,10 +137,10 @@ export default function AdminStudentsControl() {
                                 <tbody className="divide-y divide-border">
                                     {filteredStudents.map((student) => (
                                         <tr key={student.id} className="hover:bg-muted/20 transition-colors">
-                                            <td className="px-6 py-4 font-bold">{student.rollNumber || student.id.slice(0, 6).toUpperCase()}</td>
-                                            <td className="px-6 py-4">{student.name || 'Unnamed Record'}</td>
-                                            <td className="px-6 py-4 text-muted-foreground">{student.branch || 'None'} - Yr {student.year || 1}</td>
-                                            <td className="px-6 py-4">
+                                             <td className="px-3 sm:px-6 py-3 sm:py-4 font-bold whitespace-nowrap">{student.rollNumber || student.id.slice(0, 6).toUpperCase()}</td>
+                                             <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap">{student.name || 'Unnamed Record'}</td>
+                                             <td className="px-3 sm:px-6 py-3 sm:py-4 text-muted-foreground whitespace-nowrap">{student.branch || 'None'} - Yr {student.year || 1}</td>
+                                             <td className="px-3 sm:px-6 py-3 sm:py-4">
                                                 <Badge variant={student.academicStatus === 'Active' || !student.academicStatus ? 'default' : 'destructive'} className="uppercase text-[10px] tracking-wider font-bold">
                                                     {student.academicStatus || 'Active'}
                                                 </Badge>
