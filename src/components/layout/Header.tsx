@@ -35,7 +35,7 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-card/80 backdrop-blur-xl border-b border-border">
-      <div className="container mx-auto px-6 h-16 flex items-center justify-between gap-4">
+      <div className="container mx-auto px-3 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-4">
         {/* Left Side: Layout Toggle & Logo */}
         <div className="flex items-center gap-4">
           {toggleSidebar && (user?.role === 'admin' || user?.role === 'hod' || user?.role === 'faculty' || user?.role === 'student') && (
