@@ -221,11 +221,18 @@
   }
 
   .sidebar-link {
-    @apply flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-all duration-200;
+    @apply flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-all duration-200 min-h-[44px];
   }
 
   .sidebar-link.active {
     @apply bg-primary/10 text-primary font-medium;
+  }
+
+  /* Mobile-friendly touch targets */
+  @media (max-width: 768px) {
+    .dashboard-card {
+      @apply p-4;
+    }
   }
 }
 

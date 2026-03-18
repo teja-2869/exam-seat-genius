@@ -122,7 +122,7 @@ export const ClassroomRenderer: React.FC<ClassroomRendererProps> = ({ layout, se
                         const seatInfo = getSeatInfo(rIndex, cIndex);
 
                         return (
-                            <div key={`bench-${rIndex}-${cIndex}`} className="flex flex-col bg-white p-2 rounded-xl border border-gray-200 shadow-sm w-36 gap-2">
+                            <div key={`bench-${rIndex}-${cIndex}`} className="flex flex-col bg-white p-2 rounded-xl border border-gray-200 shadow-sm w-28 sm:w-36 gap-2">
                                 <div className="w-full h-4 bg-gray-200 rounded-sm mb-1"></div> {/* Desk visual representation */}
                                 <div className="flex gap-2">
                                     <div className="flex-1">{renderSeat(seatInfo?.leftSeat || null, true)}</div>

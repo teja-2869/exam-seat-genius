@@ -125,7 +125,7 @@ export default function AdminBlocks() {
                     <div className="grid grid-cols-1 gap-6">
                         {blocks.map((block) => (
                             <Card key={block.id} className="dashboard-card relative">
-                                <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
+                                <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between border-b pb-4 gap-3">
                                     <div>
                                         <CardTitle className="flex items-center gap-2"><Building2 className="w-5 h-5 text-primary" /> Block {block.blockNumber} {block.blockName ? `- ${block.blockName}` : ''}</CardTitle>
                                         <p className="text-sm text-muted-foreground mt-1">{block.positionDescription}</p>
