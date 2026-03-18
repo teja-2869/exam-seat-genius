@@ -31,7 +31,7 @@ export const StudentDashboard: React.FC = () => {
                         <span>/</span>
                         <span className="text-foreground font-medium">Dashboard</span>
                     </div>
-                    <h1 className="text-3xl font-display font-bold text-foreground mb-2">
+                    <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground mb-2">
                         Welcome, {user?.name || 'Student'}!
                     </h1>
                     <p className="text-muted-foreground">
