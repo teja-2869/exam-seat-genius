@@ -70,7 +70,7 @@ export default function AdminStudentsControl() {
                         <div className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
                             <span>Admin</span><span>/</span><span>Academics</span><span>/</span><span className="text-foreground font-medium">Master Dataset</span>
                         </div>
-                        <h1 className="text-3xl font-display font-bold text-foreground mb-2">
+                        <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground mb-2">
                             Student Dataset Engine
                         </h1>
                         <p className="text-muted-foreground">
