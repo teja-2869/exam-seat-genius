@@ -35,7 +35,7 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-card/80 backdrop-blur-xl border-b border-border">
-      <div className="container mx-auto px-6 h-16 flex items-center justify-between gap-4">
+      <div className="container mx-auto px-3 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-4">
         {/* Left Side: Layout Toggle & Logo */}
         <div className="flex items-center gap-4">
           {toggleSidebar && (user?.role === 'admin' || user?.role === 'hod' || user?.role === 'faculty' || user?.role === 'student') && (
@@ -48,8 +48,8 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
             className="flex items-center gap-3 cursor-pointer"
             onClick={() => navigate(getDashboardRoute())}
           >
-            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-md">
-              <GraduationCap className="w-6 h-6 text-primary-foreground" />
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-primary flex items-center justify-center shadow-md">
+              <GraduationCap className="w-5 h-5 sm:w-6 sm:h-6 text-primary-foreground" />
             </div>
             <div>
               <div className="flex items-center gap-3">

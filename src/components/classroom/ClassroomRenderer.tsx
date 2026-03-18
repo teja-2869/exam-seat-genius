@@ -66,7 +66,7 @@ export const ClassroomRenderer: React.FC<ClassroomRendererProps> = ({ layout, se
     // We build a flex/grid layout
     // Add padding or absolute elements for Board and Door
     return (
-        <div className="relative w-full overflow-x-auto p-12 bg-gray-50/50 rounded-2xl border border-gray-200">
+        <div className="relative w-full overflow-x-auto p-4 sm:p-8 lg:p-12 bg-gray-50/50 rounded-2xl border border-gray-200">
 
             {/* Dynamic Board Placement */}
             {boardPosition === 'top' && (
@@ -122,7 +122,7 @@ export const ClassroomRenderer: React.FC<ClassroomRendererProps> = ({ layout, se
                         const seatInfo = getSeatInfo(rIndex, cIndex);
 
                         return (
-                            <div key={`bench-${rIndex}-${cIndex}`} className="flex flex-col bg-white p-2 rounded-xl border border-gray-200 shadow-sm w-36 gap-2">
+                            <div key={`bench-${rIndex}-${cIndex}`} className="flex flex-col bg-white p-2 rounded-xl border border-gray-200 shadow-sm w-28 sm:w-36 gap-2">
                                 <div className="w-full h-4 bg-gray-200 rounded-sm mb-1"></div> {/* Desk visual representation */}
                                 <div className="flex gap-2">
                                     <div className="flex-1">{renderSeat(seatInfo?.leftSeat || null, true)}</div>
