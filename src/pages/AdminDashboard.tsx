@@ -144,7 +144,7 @@ const AdminDashboard: React.FC = () => {
           <div className="h-40 flex items-center justify-center border rounded-xl"><Activity className="animate-spin text-primary" /></div>
         ) : (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
               <Card className="dashboard-card shadow-sm border-l-4 border-l-blue-500">
                 <CardContent className="p-4 flex flex-col justify-center">
                   <span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1">Total Blocks</span>
