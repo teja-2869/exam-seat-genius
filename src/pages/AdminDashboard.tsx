@@ -123,7 +123,7 @@ const AdminDashboard: React.FC = () => {
 
   return (
     <AdminLayout>
-      <div className="max-w-7xl mx-auto space-y-8 animate-fade-in pb-12">
+      <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8 animate-fade-in pb-12">
         {/* Header Section */}
         <div>
           <div className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
