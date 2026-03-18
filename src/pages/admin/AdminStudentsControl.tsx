@@ -145,7 +145,7 @@ export default function AdminStudentsControl() {
                                                     {student.academicStatus || 'Active'}
                                                 </Badge>
                                             </td>
-                                            <td className="px-6 py-4 text-right">
+                                            <td className="px-3 sm:px-6 py-3 sm:py-4 text-right whitespace-nowrap">
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"

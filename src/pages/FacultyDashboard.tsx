@@ -48,7 +48,7 @@ const FacultyDashboard: React.FC = () => {
           </div>
 
           {/* Bottom/Right Section: Duty List */}
-          <div className="lg:col-span-2 animate-slide-up stagger-2 h-[500px]">
+          <div className="lg:col-span-2 animate-slide-up stagger-2 max-h-[500px]">
             <FacultyDutyList />
           </div>
 

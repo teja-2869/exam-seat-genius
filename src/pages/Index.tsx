@@ -52,7 +52,7 @@ const Index = () => {
               <span className="gradient-text">ExamSeat</span> Pro
             </h1>
             
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+            <p className="text-base sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
               A centralized, AI-validated examination seating and invigilation management system 
               designed for engineering colleges.
             </p>

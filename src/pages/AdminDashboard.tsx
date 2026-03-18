@@ -208,21 +208,21 @@ const AdminDashboard: React.FC = () => {
                   <CardTitle className="text-lg font-display text-foreground flex items-center gap-2"><Building2 className="w-5 h-5 text-primary" /> Institution Overview</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 p-3 bg-muted/50 rounded-lg">
                     <span className="text-sm font-medium text-muted-foreground">Institution Name</span>
-                    <span className="font-semibold">{college?.name || 'N/A'}</span>
+                    <span className="font-semibold text-sm sm:text-base truncate">{college?.name || 'N/A'}</span>
                   </div>
-                  <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 p-3 bg-muted/50 rounded-lg">
                     <span className="text-sm font-medium text-muted-foreground">Institution Code</span>
-                    <span className="font-semibold">{college?.code || 'N/A'}</span>
+                    <span className="font-semibold text-sm sm:text-base">{college?.code || 'N/A'}</span>
                   </div>
-                  <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 p-3 bg-muted/50 rounded-lg">
                     <span className="text-sm font-medium text-muted-foreground">Address / Location</span>
-                    <span className="font-semibold">{college?.location || 'N/A'}</span>
+                    <span className="font-semibold text-sm sm:text-base truncate">{college?.location || 'N/A'}</span>
                   </div>
-                  <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 p-3 bg-muted/50 rounded-lg">
                     <span className="text-sm font-medium text-muted-foreground">Contact Email</span>
-                    <span className="font-semibold">{college?.email || 'N/A'}</span>
+                    <span className="font-semibold text-sm sm:text-base truncate">{college?.email || 'N/A'}</span>
                   </div>
                   <div className="flex justify-between items-center p-3 bg-primary/10 border-primary/20 border rounded-lg">
                     <span className="text-sm font-bold text-primary">Total Infrastructure Capacity</span>
