@@ -99,7 +99,7 @@ export default function AdminBlocks() {
     return (
         <AdminLayout>
             <div className="max-w-7xl mx-auto space-y-8 animate-fade-in pb-12">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                         <div className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
                             <span>Admin</span><span>/</span><span>Infrastructure</span><span>/</span><span className="text-foreground font-medium">Blocks & Rooms</span>
