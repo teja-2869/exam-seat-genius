@@ -66,7 +66,7 @@ export const ClassroomRenderer: React.FC<ClassroomRendererProps> = ({ layout, se
     // We build a flex/grid layout
     // Add padding or absolute elements for Board and Door
     return (
-        <div className="relative w-full overflow-x-auto p-12 bg-gray-50/50 rounded-2xl border border-gray-200">
+        <div className="relative w-full overflow-x-auto p-4 sm:p-8 lg:p-12 bg-gray-50/50 rounded-2xl border border-gray-200">
 
             {/* Dynamic Board Placement */}
             {boardPosition === 'top' && (
