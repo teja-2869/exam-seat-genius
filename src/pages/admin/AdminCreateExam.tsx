@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { auth, db } from '@/lib/firebase';
-import { collection, query, where, getDocs, addDoc, serverTimestamp, getDoc, doc } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function AdminCreateExam() {
   const { college, user } = useAuth();
@@ -40,28 +40,18 @@ export default function AdminCreateExam() {
 
   const handleCreateExam = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!auth.currentUser) return;
-    
+    const userData = user as any;
+    if (!userData || !userData.role || !userData.institutionId) {
+        console.log("User data missing ❌");
+        return;
+    }
+    console.log("User Data:", userData);
+
     setLoading(true);
     try {
-        const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-        if (!userDoc.exists()) {
-            alert("No active user session details found.");
-            setLoading(false);
-            return;
-        }
-
-        const currentUser = userDoc.data();
-        if (!currentUser.institutionId) {
-            alert("Error: Critical verification failed - institutionId is missing for the active user instance.");
-            setLoading(false);
-            return;
-        }
-        console.log("Writing with institutionId:", currentUser.institutionId);
-
         // EXACT FORMAT AS REQUESTED:
         await addDoc(collection(db, 'exams'), {
-            institutionId: currentUser.institutionId,
+            institutionId: userData.institutionId,
             examName: formData.examName,
             date: formData.date,
             subject: formData.subject,

@@ -26,7 +26,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { auth, db } from '@/lib/firebase';
-import { collection, query, where, getDocs, addDoc, deleteDoc, doc, serverTimestamp, writeBatch, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, deleteDoc, doc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 import { ClassroomRenderer } from '@/components/classroom/ClassroomRenderer';
 
@@ -94,25 +94,17 @@ export default function HODRooms() {
     }, [college, user]);
 
     const handleCreateRoom = async () => {
-        if (!auth.currentUser || !institutionId || !assignedBlock) return;
+        const userData = user as any;
+        if (!userData || !userData.role || !userData.institutionId) {
+            console.log("User data missing ❌");
+            return;
+        }
+        console.log("User Data:", userData);
+
+        if (!assignedBlock) return;
 
         try {
             setSubmitLoading(true);
-
-            // Fetch current user data from /users collection 
-            const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-            if (!userDoc.exists()) {
-                alert("Session user details not found.");
-                setSubmitLoading(false);
-                return;
-            }
-            const verifiedUser = userDoc.data();
-            if (!verifiedUser.institutionId) {
-                alert("Error: Critical verification failed - institutionId is missing for the active user instance.");
-                setSubmitLoading(false);
-                return;
-            }
-            console.log("Writing with institutionId:", verifiedUser.institutionId);
             if (!formData.floorNumber || !formData.roomNumber) {
                 alert('Missing required fields');
                 setSubmitLoading(false);
@@ -134,7 +126,7 @@ export default function HODRooms() {
             }
 
             await addDoc(collection(db, 'classrooms'), {
-                institutionId: verifiedUser.institutionId,
+                institutionId: userData.institutionId,
                 blockNumber: assignedBlock,
                 branch,
                 floorNumber: formData.floorNumber,
@@ -192,23 +184,17 @@ export default function HODRooms() {
     };
 
     const handleBulkUpload = async () => {
-        if (!auth.currentUser || !institutionId || !assignedBlock || previewData.length === 0) return;
+        const userData = user as any;
+        if (!userData || !userData.role || !userData.institutionId) {
+            console.log("User data missing ❌");
+            return;
+        }
+        console.log("User Data:", userData);
+
+        if (!assignedBlock || previewData.length === 0) return;
         setUploadLoading(true);
 
         try {
-            const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-            if (!userDoc.exists()) {
-                alert("Session user details not found.");
-                setUploadLoading(false);
-                return;
-            }
-            const verifiedUser = userDoc.data();
-            if (!verifiedUser.institutionId) {
-                alert("Error: Critical verification failed - institutionId is missing for the active user instance.");
-                setUploadLoading(false);
-                return;
-            }
-            console.log("Writing with institutionId:", verifiedUser.institutionId);
             const batch = writeBatch(db);
             let validAdds = 0;
             
@@ -225,7 +211,7 @@ export default function HODRooms() {
 
                 const newDocRef = doc(collection(db, 'classrooms'));
                 batch.set(newDocRef, {
-                    institutionId: verifiedUser.institutionId,
+                    institutionId: userData.institutionId,
                     blockNumber: assignedBlock,
                     branch,
                     floorNumber: String(row.floorNumber),

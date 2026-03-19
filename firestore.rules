@@ -1,120 +1,154 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Function to check if user is authenticated
+
+    //--------------------------------------------
+    // AUTH HELPERS
+    //--------------------------------------------
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    // Function to get user's institution ID from custom claims or fallback user doc
+    function getUserId() {
+      return request.auth.uid;
+    }
+
+    //--------------------------------------------
+    // SAFE USER DATA FETCH (Fallback system)
+    //--------------------------------------------
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(getUserId())).data;
+    }
+
     function getUserInstitution() {
-      return request.auth.token.institutionId != null
+      return ('institutionId' in request.auth.token)
         ? request.auth.token.institutionId
-        : get(/databases/$(database)/documents/users/$(request.auth.uid)).data.institutionId;
+        : getUserData().institutionId;
     }
 
-    // Function to get user's role from custom claims or fallback user doc
     function getUserRole() {
-      return request.auth.token.role != null
+      return ('role' in request.auth.token)
         ? request.auth.token.role
-        : get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+        : getUserData().role;
     }
 
-    // Is the requested document in the user's institution?
-    function isSameInstitution(resourceData) {
-      return getUserInstitution() != null && resourceData.institutionId == getUserInstitution();
-    }
-
-    // Role checks
+    //--------------------------------------------
+    // ROLE CHECKS
+    //--------------------------------------------
     function isAdmin() {
-      return isAuthenticated() && getUserRole() == 'ADMIN';
+      return isAuthenticated() && (getUserRole().upper() == "ADMIN");
     }
 
     function isHOD() {
-      return isAuthenticated() && getUserRole() == 'HOD';
+      return isAuthenticated() && (getUserRole().upper() == "HOD");
     }
 
     function isFaculty() {
-      return isAuthenticated() && getUserRole() == 'FACULTY';
+      return isAuthenticated() && (getUserRole().upper() == "FACULTY");
     }
 
     function isStudent() {
-      return isAuthenticated() && getUserRole() == 'STUDENT';
+      return isAuthenticated() && (getUserRole().upper() == "STUDENT");
     }
 
-    // 1. users Collection
+    //--------------------------------------------
+    // INSTITUTION CHECK (SAFE)
+    //--------------------------------------------
+    function sameInstitutionForRead() {
+      return resource.data.institutionId == getUserInstitution();
+    }
+
+    function sameInstitutionForWrite() {
+      return request.resource.data.institutionId == getUserInstitution();
+    }
+
+    //--------------------------------------------
+    // USERS
+    //--------------------------------------------
     match /users/{userId} {
-      // Users can read/write their own profile
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-      allow read: if (isAdmin() || isHOD()) && isSameInstitution(resource.data);
+      allow read, write: if isAuthenticated() && getUserId() == userId;
+
+      allow read: if (isAdmin() || isHOD()) &&
+        resource.data.institutionId == getUserInstitution();
     }
 
-    // 2. institutions Collection (Registry)
+    //--------------------------------------------
+    // INSTITUTIONS
+    //--------------------------------------------
     match /institutions/{institutionId} {
-      // Anyone can read institutions (needed for listing in selector)
       allow read: if true;
-      // Any authenticated user can register an institution (since they do this during sign up)
-      allow write: if request.auth != null;
+      allow create: if isAuthenticated();
+      allow update: if isAdmin();
     }
 
-    // 3. students Collection
+    //--------------------------------------------
+    // STUDENTS
+    //--------------------------------------------
     match /students/{studentId} {
-      // Students can read their own data
-      allow read: if request.auth != null && request.auth.uid == studentId;
-      // Admins and HODs can read/write all students in their institution
-      allow read, write: if (isAdmin() || isHOD()) && isSameInstitution(resource.data);
-      // Protect creation: Must assign same institution
-      allow create: if (isAdmin() || isHOD()) && isSameInstitution(request.resource.data);
+
+      allow read: if isStudent() && getUserId() == studentId;
+
+      allow read, write: if (isAdmin() || isHOD()) &&
+        sameInstitutionForRead();
+
+      allow create: if (isAdmin() || isHOD()) &&
+        sameInstitutionForWrite();
     }
 
-    // 4. exams Collection
+    //--------------------------------------------
+    // EXAMS
+    //--------------------------------------------
     match /exams/{examId} {
-      // Everyone in the institution can read exams
-      allow read: if isAuthenticated() && isSameInstitution(resource.data);
-      // Only Admins / HODs can manage exams
-      allow write: if (isAdmin() || isHOD()) && isSameInstitution(resource.data);
+      allow read: if isAuthenticated() && sameInstitutionForRead();
+      allow write: if (isAdmin() || isHOD()) && sameInstitutionForWrite();
     }
 
-    // 5. seatingPlans Collection
+    //--------------------------------------------
+    // SEATING PLANS
+    //--------------------------------------------
     match /seatingPlans/{planId} {
-      // Students can read seating plans for their institution 
-      // (or we could limit it further by querying if their ID is in the plan)
-      allow read: if isAuthenticated() && isSameInstitution(resource.data);
-      // Only Admins can manage seating plans
-      allow write: if isAdmin() && isSameInstitution(resource.data);
+      allow read: if isAuthenticated() && sameInstitutionForRead();
+      allow write: if isAdmin() && sameInstitutionForWrite();
     }
 
-    // 6. attendance Collection
+    //--------------------------------------------
+    // ATTENDANCE
+    //--------------------------------------------
     match /attendance/{attendanceId} {
-      // Faculty can read & write attendance for their institution
-      allow read, write: if isFaculty() && isSameInstitution(resource.data);
-      // Admins and HODs can read attendance
-      allow read: if (isAdmin() || isHOD()) && isSameInstitution(resource.data);
-      // Students can read only their own attendance (would require specific query filtering)
-      allow read: if isStudent() && isSameInstitution(resource.data) && resource.data.studentId == request.auth.uid;
+
+      allow read, write: if isFaculty() && sameInstitutionForWrite();
+
+      allow read: if (isAdmin() || isHOD()) && sameInstitutionForRead();
+
+      allow read: if isStudent() &&
+        sameInstitutionForRead() &&
+        resource.data.studentId == getUserId();
     }
 
-    // 7. rooms Collection (Legacy, keeping for compatibility if needed)
-    match /rooms/{roomId} {
-      allow read: if isAuthenticated() && isSameInstitution(resource.data);
-      allow write: if (isAdmin() || isHOD()) && isSameInstitution(resource.data);
-    }
-
-    // 8. blocks Collection
+    //--------------------------------------------
+    // BLOCKS
+    //--------------------------------------------
     match /blocks/{blockId} {
-      allow read: if isAuthenticated() && isSameInstitution(resource.data);
-      // Let admins write directly. To allow creating new docs (where resource doesn't exist yet),
-      // we check request.resource.data for 'create' 
-      allow create: if (isAdmin() || isHOD()) && isSameInstitution(request.resource.data);
-      allow update, delete: if (isAdmin() || isHOD()) && isSameInstitution(resource.data);
+      allow read: if isAuthenticated() && sameInstitutionForRead();
+
+      allow create: if isAdmin() && sameInstitutionForWrite();
+
+      allow update, delete: if isAdmin() && sameInstitutionForRead();
     }
 
-    // 9. classrooms Collection
+    //--------------------------------------------
+    // CLASSROOMS
+    //--------------------------------------------
     match /classrooms/{classroomId} {
-      allow read: if isAuthenticated() && isSameInstitution(resource.data);
-      allow create: if (isAdmin() || isHOD()) && isSameInstitution(request.resource.data);
-      allow update, delete: if (isAdmin() || isHOD()) && isSameInstitution(resource.data);
+
+      allow read: if isAuthenticated() && sameInstitutionForRead();
+
+      allow create: if (isAdmin() || isHOD()) &&
+        sameInstitutionForWrite();
+
+      allow update, delete: if (isAdmin() || isHOD()) &&
+        sameInstitutionForRead();
     }
+
   }
 }

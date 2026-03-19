@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { CheckCircle2, XCircle, Send, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
-import { doc, collection, addDoc, serverTimestamp, getDoc } from 'firebase/firestore';
+import { doc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { auth } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -38,30 +38,20 @@ export const FacultyAttendance: React.FC<FacultyAttendanceProps> = ({ isOpen, on
     };
 
         const submitAttendance = async () => {
-        if (!auth.currentUser) {
-            toast({ title: 'Auth Error', description: 'Not signed in', variant: 'destructive' });
+        const userData = user as any;
+        if (!userData || !userData.role || !userData.institutionId) {
+            console.log("User data missing ❌");
+            toast({ title: 'Auth Error', description: 'Institution context missing', variant: 'destructive' });
             return;
         }
+        console.log("User Data:", userData);
+
         setLoading(true);
         try {
-            const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-            if (!userDoc.exists()) {
-                toast({ title: 'Session Error', description: 'User data not found.', variant: 'destructive' });
-                setLoading(false);
-                return;
-            }
-            const currentUser = userDoc.data();
-            if (!currentUser.institutionId) {
-                alert("Error: Critical verification failed - institutionId is missing for the active user instance.");
-                setLoading(false);
-                return;
-            }
-
-            console.log("Writing with institutionId:", currentUser.institutionId);
 
             const attendanceData = {
-                institutionId: currentUser.institutionId,
-                facultyId: auth.currentUser.uid,
+                institutionId: userData.institutionId,
+                facultyId: userData.uid || userData.id || 'faculty',
                 examId: examId,
                 timestamp: serverTimestamp(),
                 records: Object.entries(attendance).map(([studentId, isPresent]) => ({

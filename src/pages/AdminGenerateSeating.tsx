@@ -16,7 +16,7 @@ import { Label } from '@/components/ui/label';
 
 import { auth, functions, db } from '@/lib/firebase';
 import { httpsCallable } from 'firebase/functions';
-import { collection, addDoc, serverTimestamp, query, where, getDocs, getDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 import { ClassroomRenderer } from '@/components/classroom/ClassroomRenderer';
 import { Classroom, SeatingPlanLayout } from '@/types';
 
@@ -49,7 +49,7 @@ export interface ValidationResult {
 
 const AdminGenerateSeating: React.FC = () => {
   const navigate = useNavigate();
-  const { college } = useAuth(); // Scoped to institution
+  const { college, user } = useAuth(); // Scoped to institution
 
   const [students, setStudents] = useState<Student[]>([]);
   const [seatingArrangements, setSeatingArrangements] = useState<SeatingArrangement[]>([]);
@@ -180,25 +180,16 @@ const AdminGenerateSeating: React.FC = () => {
   };
 
   const saveToFirebase = async () => {
-    if (!auth.currentUser) {
-      alert('Authentication context missing or not isolated. Ensure you are signed into an institution.'); return;
+    const userData = user as any;
+    if (!userData || !userData.role || !userData.institutionId) {
+        console.log("User data missing ❌");
+        return;
     }
+    console.log("User Data:", userData);
 
     try {
-      const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-      if (!userDoc.exists()) {
-          alert('Failed to retrieve active user identity context.');
-          return;
-      }
-      const currentUser = userDoc.data();
-      if (!currentUser.institutionId) {
-          alert("Error: Critical verification failed - institutionId is missing for the active user instance.");
-          return;
-      }
-      console.log("Writing with institutionId:", currentUser.institutionId);
-
       const docRef = await addDoc(collection(db, 'seatingPlans'), {
-        institutionId: currentUser.institutionId,
+        institutionId: userData.institutionId,
         examName: selectedExam,
         roomId: selectedRoom,
         plan: seatingArrangements,

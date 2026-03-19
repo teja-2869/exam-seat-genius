@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { auth, db } from '@/lib/firebase';
-import { collection, query, where, getDocs, doc, writeBatch, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, writeBatch } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 
 export default function AdminBulkImport() {
@@ -43,7 +43,14 @@ export default function AdminBulkImport() {
     };
 
     const handleUploadExecution = async () => {
-        if (!auth.currentUser || !selectedFile || importType !== 'students') {
+        const userData = user as any;
+        if (!userData || !userData.role || !userData.institutionId) {
+            console.log("User data missing ❌");
+            return;
+        }
+        console.log("User Data:", userData);
+
+        if (!selectedFile || importType !== 'students') {
             alert('Currently only Student Upload mapping is active in this module or missing file/auth!');
             return;
         }
@@ -54,19 +61,6 @@ export default function AdminBulkImport() {
             if (!data) return;
 
             try {
-                const userDoc = await getDoc(doc(db, 'users', auth.currentUser!.uid));
-                if (!userDoc.exists()) {
-                    alert('Error: Active user session could not be found.');
-                    return;
-                }
-
-                const currentUser = userDoc.data();
-                if (!currentUser.institutionId) {
-                    alert('Error: Critical verification failed - institutionId is missing for the active user instance.');
-                    return;
-                }
-                
-                console.log("Writing with institutionId:", currentUser.institutionId);
 
                 const workbook = XLSX.read(data, { type: 'binary' });
                 const sheetName = workbook.SheetNames[0];
@@ -92,7 +86,7 @@ export default function AdminBulkImport() {
 
                     // Skip duplicates dynamically
                     const dupQ = query(collection(db, 'students'), 
-                        where('institutionId', '==', currentUser.institutionId),
+                        where('institutionId', '==', userData.institutionId),
                         where('rollNumber', '==', mappedRoll)
                     );
                     const snap = await getDocs(dupQ);
@@ -101,7 +95,7 @@ export default function AdminBulkImport() {
                     const newDocRef = doc(collection(db, 'students'));
                     batch.set(newDocRef, {
                         // STRICT OVERRIDE FOR STUDENTS UPLOAD REQUESTED:
-                        institutionId: currentUser.institutionId,
+                        institutionId: userData.institutionId,
                         name: mappedName,
                         rollNumber: mappedRoll,
                         branch: mappedBranch,

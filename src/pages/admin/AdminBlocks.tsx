@@ -24,7 +24,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { auth, db } from '@/lib/firebase';
-import { collection, query, where, getDocs, addDoc, deleteDoc, doc, serverTimestamp, writeBatch, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, deleteDoc, doc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 import { Upload, Download, ArrowLeft, Layers, DoorOpen } from 'lucide-react';
 import { ClassroomRenderer } from '@/components/classroom/ClassroomRenderer';
@@ -56,53 +56,15 @@ export default function AdminBlocks() {
     const [selectedRoom, setSelectedRoom] = useState<any | null>(null);
     const [rooms, setRooms] = useState<any[]>([]);
 
-    const ensureAdminSession = async () => {
-        const firebaseUser = auth.currentUser;
-        console.log('Current User:', firebaseUser);
-
-        if (!firebaseUser) {
-            throw new Error('You must be logged in as an admin to upload block data.');
-        }
-
-        await firebaseUser.getIdToken(true);
-        const tokenResult = await firebaseUser.getIdTokenResult();
-        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-
-        if (!userDoc.exists()) {
-            throw new Error('User session invalid.');
-        }
-
-        const currentUser = userDoc.data() as {
-            institutionId?: string;
-            role?: string;
-        };
-
-        if (!currentUser.institutionId) {
-            throw new Error('institutionId is missing for the active user.');
-        }
-
-        const normalizedRole = String(currentUser.role || tokenResult.claims.role || '').toUpperCase();
-        if (normalizedRole !== 'ADMIN') {
-            throw new Error('Only admin users can manage blocks.');
-        }
-
-        return {
-            firebaseUser,
-            currentUser,
-            claims: tokenResult.claims,
-        };
-    };
-
     const fetchBlocks = async () => {
-        const institutionId = college?.id || (user as any)?.institutionId;
-        if (!institutionId) {
+        const userData = user as any;
+        if (!userData || !userData.role || !userData.institutionId) {
             setLoading(false);
             return;
         }
 
         try {
-            await ensureAdminSession();
-            const bQuery = query(collection(db, 'blocks'), where('institutionId', '==', institutionId));
+            const bQuery = query(collection(db, 'blocks'), where('institutionId', '==', userData.institutionId));
             const snap = await getDocs(bQuery);
             setBlocks(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         } catch (err: any) {
@@ -118,13 +80,12 @@ export default function AdminBlocks() {
     };
 
     const fetchRooms = async (blockNumber: string, floorNumber: number) => {
-        const institutionId = college?.id || (user as any)?.institutionId;
-        if (!institutionId) return;
+        const userData = user as any;
+        if (!userData || !userData.institutionId) return;
 
         try {
-            await ensureAdminSession();
             const rQuery = query(collection(db, 'classrooms'),
-                where('institutionId', '==', institutionId),
+                where('institutionId', '==', userData.institutionId),
                 where('blockNumber', '==', blockNumber),
                 where('floorNumber', '==', String(floorNumber))
             );
@@ -140,10 +101,15 @@ export default function AdminBlocks() {
     }, [college, user]);
 
     const handleCreateBlock = async () => {
+        const userData = user as any;
+        if (!userData || !userData.role || !userData.institutionId) {
+            console.log("User data missing ❌");
+            return;
+        }
+        console.log("User Data:", userData);
+
         try {
             setSubmitLoading(true);
-
-            const { firebaseUser, currentUser } = await ensureAdminSession();
 
             const floorsArray = Array.from({ length: Number(formData.floorsCount) }, (_, i) => ({
                 floorNumber: i + 1,
@@ -161,7 +127,7 @@ export default function AdminBlocks() {
             }
 
             const dupQuery = query(collection(db, 'blocks'),
-                where('institutionId', '==', currentUser.institutionId),
+                where('institutionId', '==', userData.institutionId),
                 where('blockNumber', '==', formData.blockNumber)
             );
             const dupSnap = await getDocs(dupQuery);
@@ -175,13 +141,13 @@ export default function AdminBlocks() {
             }
 
             await addDoc(collection(db, 'blocks'), {
-                institutionId: currentUser.institutionId,
+                institutionId: userData.institutionId,
                 blockNumber: formData.blockNumber,
                 blockName: formData.blockName || '',
                 totalFloors: Number(formData.floorsCount),
                 status: formData.status,
                 floors: floorsArray,
-                createdBy: firebaseUser.uid,
+                createdBy: userData.uid || userData.id || 'admin',
                 createdAt: serverTimestamp()
             });
 
@@ -234,17 +200,23 @@ export default function AdminBlocks() {
     };
 
     const handleBulkUpload = async () => {
+        const userData = user as any;
+        if (!userData || !userData.role || !userData.institutionId) {
+            console.log("User data missing ❌");
+            return;
+        }
+        console.log("User Data:", userData);
+
         if (previewData.length === 0) return;
         setUploadLoading(true);
 
         try {
-            const { firebaseUser, currentUser } = await ensureAdminSession();
             const batch = writeBatch(db);
             let validAdds = 0;
 
             for (const row of previewData) {
                 const dupQuery = query(collection(db, 'blocks'),
-                    where('institutionId', '==', currentUser.institutionId),
+                    where('institutionId', '==', userData.institutionId),
                     where('blockNumber', '==', String(row.blockNumber))
                 );
                 const dupSnap = await getDocs(dupQuery);
@@ -259,13 +231,13 @@ export default function AdminBlocks() {
 
                 const newDocRef = doc(collection(db, 'blocks'));
                 batch.set(newDocRef, {
-                    institutionId: currentUser.institutionId,
+                    institutionId: userData.institutionId,
                     blockNumber: String(row.blockNumber),
                     blockName: row.blockName ? String(row.blockName) : '',
                     totalFloors: floorsCount,
                     status: row.status || 'Active',
                     floors: floorsArray,
-                    createdBy: firebaseUser.uid,
+                    createdBy: userData.uid || userData.id || 'admin',
                     createdAt: serverTimestamp()
                 });
                 validAdds++;
