@@ -38,15 +38,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser && !suppressAutoLogin.current) {
         try {
+          await firebaseUser.getIdToken(true);
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+
           if (userDoc.exists()) {
-            const userData = userDoc.data() as User;
-            setUser(userData);
-            setCurrentRole(userData.role);
-            if (userData.collegeId) {
-              const collegeDoc = await getDoc(doc(db, 'colleges', userData.collegeId));
+            const rawUserData = userDoc.data() as User & {
+              uid?: string;
+              institutionId?: string;
+              institutionName?: string;
+            };
+
+            const normalizedUser = {
+              ...rawUserData,
+              id: rawUserData.id || rawUserData.uid || firebaseUser.uid,
+              collegeId: rawUserData.collegeId || rawUserData.institutionId || '',
+            } as User;
+
+            setUser(normalizedUser);
+            setCurrentRole(normalizedUser.role);
+
+            const activeCollegeId = normalizedUser.collegeId;
+            if (activeCollegeId) {
+              const collegeDoc = await getDoc(doc(db, 'institutions', activeCollegeId));
               if (collegeDoc.exists()) {
-                const collegeData = collegeDoc.data() as College;
+                const collegeData = { id: activeCollegeId, ...collegeDoc.data() } as College;
                 if (collegeData.createdAt && typeof (collegeData.createdAt as any).toDate === 'function') {
                   collegeData.createdAt = (collegeData.createdAt as any).toDate();
                 }
