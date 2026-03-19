@@ -53,8 +53,8 @@ export default function AdminBlocks() {
     const [selectedFloor, setSelectedFloor] = useState<any | null>(null);
     const [selectedRoom, setSelectedRoom] = useState<any | null>(null);
     const [rooms, setRooms] = useState<any[]>([]);
-        let institutionId = college?.id || (user as any)?.institutionId;
-        if (!institutionId) { setLoading(false); return; }
+
+
     const fetchBlocks = async () => {
         let institutionId = college?.id || (user as any)?.institutionId;
         if (!institutionId) { setLoading(false); return; }
@@ -143,6 +143,7 @@ export default function AdminBlocks() {
                 totalFloors: Number(formData.floorsCount),
                 status: formData.status,
                 floors: floorsArray,
+                createdBy: auth.currentUser!.uid,
                 createdAt: serverTimestamp()
             });
             setShowDialog(false);
@@ -233,6 +234,7 @@ export default function AdminBlocks() {
                     totalFloors: floorsCount,
                     status: row.status || 'Active',
                     floors: floorsArray,
+                    createdBy: auth.currentUser!.uid,
                     createdAt: serverTimestamp()
                 });
                 validAdds++;

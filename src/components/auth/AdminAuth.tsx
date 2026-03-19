@@ -62,8 +62,12 @@ export const AdminAuth: React.FC = () => {
         createdAt: new Date()
       };
 
-      // 1. Create the user
+      // 1. Create the user (this triggers syncCustomClaims Cloud Function)
       await setDoc(doc(db, 'users', firebaseUser.uid), user);
+
+      // 2. Wait briefly for Cloud Function to set custom claims, then refresh token
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      await firebaseUser.getIdToken(true);
 
       // 2. Register the institution (if it was from the JSON dataset, write it to Firestore so it's a valid tenant)
       const instRef = doc(db, 'institutions', selectedInstitution.id);
@@ -190,6 +194,8 @@ export const AdminAuth: React.FC = () => {
     try {
       // Re-authenticate and proceed
       const userCredential = await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
+      // Force token refresh to pick up latest custom claims
+      await userCredential.user.getIdToken(true);
       const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
       const user = userDoc.data() as any;
 

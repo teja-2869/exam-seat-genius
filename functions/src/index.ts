@@ -6,4 +6,5 @@ admin.initializeApp();
 // Export all function modules
 export * from "./generateSeatingPlan";
 export * from "./sendFacultyOTP";
+export * from "./setCustomClaims";
 // export * from "./setCustomClaims"; // Uncomment when implemented
