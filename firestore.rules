@@ -93,12 +93,26 @@ service cloud.firestore {
       allow read: if isStudent() && isSameInstitution(resource.data) && resource.data.studentId == request.auth.uid;
     }
 
-    // 7. rooms Collection
+    // 7. rooms Collection (Legacy, keeping for compatibility if needed)
     match /rooms/{roomId} {
-      // Anyone in institution can read rooms
       allow read: if isAuthenticated() && isSameInstitution(resource.data);
-      // Admins and HODs can write
       allow write: if (isAdmin() || isHOD()) && isSameInstitution(resource.data);
+    }
+
+    // 8. blocks Collection
+    match /blocks/{blockId} {
+      allow read: if isAuthenticated() && isSameInstitution(resource.data);
+      // Let admins write directly. To allow creating new docs (where resource doesn't exist yet),
+      // we check request.resource.data for 'create' 
+      allow create: if (isAdmin() || isHOD()) && isSameInstitution(request.resource.data);
+      allow update, delete: if (isAdmin() || isHOD()) && isSameInstitution(resource.data);
+    }
+
+    // 9. classrooms Collection
+    match /classrooms/{classroomId} {
+      allow read: if isAuthenticated() && isSameInstitution(resource.data);
+      allow create: if (isAdmin() || isHOD()) && isSameInstitution(request.resource.data);
+      allow update, delete: if (isAdmin() || isHOD()) && isSameInstitution(resource.data);
     }
   }
 }

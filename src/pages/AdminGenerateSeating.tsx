@@ -14,9 +14,9 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 
-import { functions, db } from '@/lib/firebase';
+import { auth, functions, db } from '@/lib/firebase';
 import { httpsCallable } from 'firebase/functions';
-import { collection, addDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, where, getDocs, getDoc, doc } from 'firebase/firestore';
 import { ClassroomRenderer } from '@/components/classroom/ClassroomRenderer';
 import { Classroom, SeatingPlanLayout } from '@/types';
 
@@ -180,13 +180,25 @@ const AdminGenerateSeating: React.FC = () => {
   };
 
   const saveToFirebase = async () => {
-    if (!college?.id) {
+    if (!auth.currentUser) {
       alert('Authentication context missing or not isolated. Ensure you are signed into an institution.'); return;
     }
 
     try {
+      const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+      if (!userDoc.exists()) {
+          alert('Failed to retrieve active user identity context.');
+          return;
+      }
+      const currentUser = userDoc.data();
+      if (!currentUser.institutionId) {
+          alert("Error: Critical verification failed - institutionId is missing for the active user instance.");
+          return;
+      }
+      console.log("Writing with institutionId:", currentUser.institutionId);
+
       const docRef = await addDoc(collection(db, 'seatingPlans'), {
-        institutionId: college.id,
+        institutionId: currentUser.institutionId,
         examName: selectedExam,
         roomId: selectedRoom,
         plan: seatingArrangements,

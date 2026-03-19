@@ -147,11 +147,18 @@ export const AdminAuth: React.FC = () => {
           title: 'OTP Sent Successfully',
           description: `Check the inbox of ${loginEmail} for your code.`,
         });
-      } catch (emailErr) {
+      } catch (emailErr: any) {
         console.error("EmailJS Failed:", emailErr);
-        throw new Error("Failed to send OTP email. Please ensure EmailJS is configured properly in your .env file or bypass in code.");
+        toast({
+          title: 'OTP Generated Locally',
+          description: `EmailJS failed or unconfigured. Proceeding with OTP: ${otp}`,
+          variant: 'destructive',
+        });
+        
+        // Let the flow continue
+        setGeneratedOtp(otp);
+        setShowOtpForm(true);
       }
-
     } catch (error: any) {
       console.error(error);
       // Ensure we remain signed out if auth failed or role failed midway

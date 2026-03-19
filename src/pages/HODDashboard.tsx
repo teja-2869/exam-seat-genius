@@ -1,184 +1,140 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
 import { HODLayout } from '@/components/layout/HODLayout';
-import { DepartmentStats } from '@/components/hod/DepartmentStats';
-import { HODQuickActions } from '@/components/hod/HODQuickActions';
-import { HODActivityFeed } from '@/components/hod/HODActivityFeed';
 import {
   Users,
-  Upload,
   Building2,
-  ClipboardList,
-  Eye,
+  GraduationCap,
+  DoorOpen,
+  Layers,
+  Activity,
   UserCheck,
-  FileSpreadsheet,
-  ArrowRight,
-  Plus,
-  Download,
-  Search,
-  Filter,
-  Edit,
-  Trash2,
-  AlertCircle,
-  CheckCircle
+  Monitor
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { db } from '@/lib/firebase';
+import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
 
-// Stats and QuickActions config moved to modular components inside components/hod/
-
-const recentUploads = [
-  {
-    id: '1',
-    name: 'Students_Sem4_2025.csv',
-    date: 'Jan 10, 2025',
-    records: 120,
-    status: 'Processed',
-    type: 'students',
-    department: 'Computer Science'
-  },
-  {
-    id: '2',
-    name: 'Classroom_Block_A.csv',
-    date: 'Jan 8, 2025',
-    records: 8,
-    status: 'Processed',
-    type: 'classrooms',
-    department: 'Computer Science'
-  },
-  {
-    id: '3',
-    name: 'Faculty_List.csv',
-    date: 'Jan 5, 2025',
-    records: 28,
-    status: 'Processed',
-    type: 'faculty',
-    department: 'Computer Science'
-  },
-];
-
-const mockClassrooms = [
-  { id: '1101', name: 'Room 1101', block: 'Block 1', floor: 1, roomNumber: '1101', capacity: 40, type: 'Lecture Hall', equipment: 'Projector, Whiteboard' },
-  { id: '1201', name: 'Room 1201', block: 'Block 1', floor: 2, roomNumber: '1201', capacity: 35, type: 'Lab', equipment: 'Computers, Projector' },
-  { id: '2101', name: 'Room 2101', block: 'Block 2', floor: 1, roomNumber: '2101', capacity: 40, type: 'Lecture Hall', equipment: 'Projector, Smart Board' },
-  { id: '2201', name: 'Room 2201', block: 'Block 2', floor: 2, roomNumber: '2201', capacity: 35, type: 'Lab', equipment: 'Computers, Whiteboard' },
-];
-
-const mockInvigilationDuties = [
-  { id: '1', exam: 'Data Structures Midterm', date: 'Jan 15, 2025', room: '1101', block: 'Block 1', faculty: 'Dr. Sarah Johnson', status: 'Assigned' },
-  { id: '2', exam: 'Database Management Final', date: 'Jan 18, 2025', room: '1201', block: 'Block 1', faculty: 'Prof. Michael Chen', status: 'Pending' },
-  { id: '3', exam: 'Computer Networks Quiz', date: 'Jan 20, 2025', room: '2101', block: 'Block 2', faculty: 'Dr. Emily Williams', status: 'Assigned' },
-];
-
-const HODDashboard: React.FC = () => {
-  const navigate = useNavigate();
+export default function HODDashboard() {
   const { college, user } = useAuth();
+  
+  const hodObj = user as any;
+  const institutionId = college?.id || hodObj?.institutionId;
+  const assignedBlock = hodObj?.assignedBlock || 'N/A';
+  const branch = hodObj?.branch || 'N/A';
 
-  // Dialog states
-  const [showStudentUpload, setShowStudentUpload] = useState(false);
-  const [showClassroomDialog, setShowClassroomDialog] = useState(false);
-  const [showSeatingDialog, setShowSeatingDialog] = useState(false);
-  const [showInvigilationDialog, setShowInvigilationDialog] = useState(false);
-  const [showUploadDetails, setShowUploadDetails] = useState(false);
-  const [selectedUpload, setSelectedUpload] = useState<any>(null);
-
-  // Form states
-  const [classroomForm, setClassroomForm] = useState({
-    name: '',
-    block: '',
-    capacity: '',
-    type: '',
-    equipment: '',
-    floor: ''
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    totalStudents: 0,
+    totalFaculty: 0,
+    totalFloors: 0,
+    totalRooms: 0,
+    totalClassrooms: 0,
+    totalLabs: 0,
+    totalCapacity: 0
   });
 
-  const [uploadStatus, setUploadStatus] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [activities, setActivities] = useState<any[]>([]);
 
-  const handleQuickAction = (action: string) => {
-    switch (action) {
-      case 'Upload Students':
-        setShowStudentUpload(true);
-        break;
-      case 'Manage Classrooms':
-        setShowClassroomDialog(true);
-        break;
-      case 'View Seating':
-        setShowSeatingDialog(true);
-        break;
-      case 'View Invigilation':
-        setShowInvigilationDialog(true);
-        break;
-      default:
-        break;
-    }
-  };
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      if (!institutionId) return;
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setUploadStatus(`Processing ${file.name}...`);
-      // Simulate file processing
-      setTimeout(() => {
-        setUploadStatus(`Successfully uploaded ${file.name}`);
-        setShowStudentUpload(false);
-      }, 2000);
-    }
-  };
+      try {
+        // Students Count
+        const sQ = query(collection(db, 'students'), where('institutionId', '==', institutionId), where('branch', '==', branch));
+        const sSnap = await getDocs(sQ);
+        const totalStudents = sSnap.size;
 
-  const handleAddClassroom = () => {
-    console.log('Adding classroom:', classroomForm);
-    setShowClassroomDialog(false);
-    setClassroomForm({
-      name: '',
-      block: '',
-      capacity: '',
-      type: '',
-      equipment: '',
-      floor: ''
-    });
-  };
+        // Faculty Count (Assuming 'department' maps to 'branch')
+        const fQ = query(collection(db, 'faculty'), where('institutionId', '==', institutionId), where('department', '==', branch));
+        const fSnap = await getDocs(fQ);
+        const totalFaculty = fSnap.size;
 
-  const handleViewUploadDetails = (upload: any) => {
-    setSelectedUpload(upload);
-    setShowUploadDetails(true);
-  };
+        // Block definition for floors
+        let totalFloors = 0;
+        const bQ = query(collection(db, 'blocks'), where('institutionId', '==', institutionId), where('blockNumber', '==', assignedBlock));
+        const bSnap = await getDocs(bQ);
+        if (!bSnap.empty) {
+            const bData = bSnap.docs[0].data();
+            totalFloors = bData.totalFloors || bData.floors?.length || 0;
+        }
 
-  const handleDeleteUpload = (uploadId: string) => {
-    console.log('Deleting upload:', uploadId);
-  };
+        // Rooms data specific to this branch & block
+        const rQ = query(collection(db, 'classrooms'), 
+            where('institutionId', '==', institutionId), 
+            where('branch', '==', branch),
+            where('blockNumber', '==', assignedBlock) // as per prompt logic: all room data entered by HOD must be saved under assignedBlock
+        );
+        const rSnap = await getDocs(rQ);
+        
+        let classrooms = 0;
+        let labs = 0;
+        let capacity = 0;
+        const roomsList: any[] = [];
 
-  const handleDownloadTemplate = () => {
-    // Create and download CSV template
-    const template = 'Name,Roll Number,Branch,Semester,Email\nJohn Doe,CS001,Computer Science,4,john@college.edu';
-    const blob = new Blob([template], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'student_template.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+        rSnap.forEach(doc => {
+            const data = doc.data();
+            if (data.roomType === 'Classroom') classrooms++;
+            if (data.roomType === 'Lab') labs++;
+            capacity += (Number(data.rowsOfBenches || 0) * Number(data.columnsOfBenches || 0));
+            roomsList.push({ ...data, id: doc.id });
+        });
+
+        setStats({
+            totalStudents,
+            totalFaculty,
+            totalFloors,
+            totalRooms: rSnap.size,
+            totalClassrooms: classrooms,
+            totalLabs: labs,
+            totalCapacity: capacity
+        });
+
+        // Generate synthetic activity from rooms logic since "recent activity" doesn't have a distinct collection
+        const recentActivities = [];
+        const sortedRooms = roomsList.sort((a, b) => {
+            const dateA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+            const dateB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+            return dateB - dateA;
+        });
+
+        for (const r of sortedRooms.slice(0, 5)) {
+            recentActivities.push({
+                id: r.id,
+                title: `Room ${r.roomNumber} Added`,
+                description: `A new ${r.roomType.toLowerCase()} was registered on Floor ${r.floorNumber}. Layout: ${r.rowsOfBenches}x${r.columnsOfBenches}.`,
+                time: r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString() : 'Recently',
+                icon: <DoorOpen className="w-4 h-4 text-primary" />
+            });
+        }
+
+        setActivities(recentActivities);
+
+      } catch (err) {
+        console.error("Dashboard fetch error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, [institutionId, branch, assignedBlock]);
+
+  if (loading) {
+      return (
+          <HODLayout>
+              <div className="flex items-center justify-center h-full pt-32">
+                  <Activity className="w-10 h-10 text-primary animate-spin" />
+              </div>
+          </HODLayout>
+      );
+  }
 
   return (
     <HODLayout>
-      <div className="max-w-7xl mx-auto space-y-8 animate-fade-in">
-
-        {/* Breadcrumb & Welcome Section */}
+      <div className="max-w-7xl mx-auto space-y-8 animate-fade-in pb-12">
         <div>
           <div className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
             <span>HOD</span>
@@ -186,433 +142,134 @@ const HODDashboard: React.FC = () => {
             <span className="text-foreground font-medium">Dashboard</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground mb-2">
-            Department Dashboard
+            Branch Infrastructure Dashboard
           </h1>
           <p className="text-muted-foreground">
-            Manage student, faculty and classroom data for your department
+            Overview of physical capacity and institutional metrics for {branch}.
           </p>
         </div>
 
-        {/* Top Section - KPI Cards */}
-        <DepartmentStats />
-
-        {/* Middle & Bottom Sections - Grid Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-          <div className="lg:col-span-1 space-y-6">
-            {/* Quick Actions */}
-            <div className="animate-slide-up stagger-1 h-fit">
-              <HODQuickActions onAction={handleQuickAction} />
-            </div>
-
-            {/* Activity Feed */}
-            <div className="animate-slide-up stagger-2 h-96">
-              <HODActivityFeed />
-            </div>
-          </div>
-
-          {/* Recent Uploads */}
-          <div className="lg:col-span-2 animate-slide-up stagger-2">
-            <Card className="dashboard-card">
-              <div className="flex items-center justify-between mb-6">
-                <CardTitle className="text-xl font-display font-bold text-foreground">Recent Uploads</CardTitle>
-                <Button variant="ghost" size="sm">
-                  View All <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              </div>
-
-              <div className="space-y-4">
-                {recentUploads.map((upload) => (
-                  <div
-                    key={upload.id}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
-                    onClick={() => handleViewUploadDetails(upload)}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-secondary/10 flex items-center justify-center shrink-0">
-                        <FileSpreadsheet className="w-5 h-5 text-secondary" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-semibold text-foreground text-sm truncate">{upload.name}</p>
-                        <p className="text-xs text-muted-foreground">{upload.date} • {upload.department}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between sm:justify-end gap-3 pl-13 sm:pl-0">
-                      <div className="text-left sm:text-right">
-                        <p className="text-sm font-medium text-foreground">{upload.records} records</p>
-                        <Badge variant={upload.status === 'Processed' ? 'default' : 'secondary'}>
-                          {upload.status}
-                        </Badge>
-                      </div>
-                      <div className="flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-9 w-9"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleViewUploadDetails(upload);
-                          }}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-9 w-9"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteUpload(upload.id);
-                          }}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+        {/* Top KPI Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <Card className="dashboard-card border-none shadow-sm hover:shadow-md transition-shadow">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Students</CardTitle>
+                    <Users className="h-4 w-4 text-blue-500" />
+                </CardHeader>
+                <CardContent>
+                    <div className="text-2xl font-bold">{stats.totalStudents}</div>
+                </CardContent>
             </Card>
-          </div>
+            <Card className="dashboard-card border-none shadow-sm hover:shadow-md transition-shadow">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Faculty</CardTitle>
+                    <UserCheck className="h-4 w-4 text-green-500" />
+                </CardHeader>
+                <CardContent>
+                    <div className="text-2xl font-bold">{stats.totalFaculty}</div>
+                </CardContent>
+            </Card>
+            <Card className="dashboard-card border-none shadow-sm hover:shadow-md transition-shadow">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Floors</CardTitle>
+                    <Layers className="h-4 w-4 text-yellow-500" />
+                </CardHeader>
+                <CardContent>
+                    <div className="text-2xl font-bold">{stats.totalFloors}</div>
+                </CardContent>
+            </Card>
+            <Card className="dashboard-card border-none shadow-sm hover:shadow-md transition-shadow">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Total Rooms</CardTitle>
+                    <Building2 className="h-4 w-4 text-indigo-500" />
+                </CardHeader>
+                <CardContent>
+                    <div className="text-2xl font-bold">{stats.totalRooms}</div>
+                </CardContent>
+            </Card>
+            <Card className="dashboard-card border-none shadow-sm hover:shadow-md transition-shadow">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Classrooms</CardTitle>
+                    <GraduationCap className="h-4 w-4 text-orange-500" />
+                </CardHeader>
+                <CardContent>
+                    <div className="text-2xl font-bold">{stats.totalClassrooms}</div>
+                </CardContent>
+            </Card>
+            <Card className="dashboard-card border-none shadow-sm hover:shadow-md transition-shadow">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Labs</CardTitle>
+                    <Monitor className="h-4 w-4 text-purple-500" />
+                </CardHeader>
+                <CardContent>
+                    <div className="text-2xl font-bold">{stats.totalLabs}</div>
+                </CardContent>
+            </Card>
         </div>
 
-        {/* Upload Section */}
-        <div className="mt-8 animate-slide-up stagger-3">
-          <Card className="dashboard-card">
-            <CardHeader>
-              <CardTitle className="text-xl font-display font-bold text-foreground">
-                Upload Data
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Student Upload */}
-                <div className="border-2 border-dashed border-border rounded-2xl p-8 text-center hover:border-secondary transition-colors cursor-pointer"
-                  onClick={() => setShowStudentUpload(true)}>
-                  <div className="w-16 h-16 rounded-2xl bg-secondary/10 flex items-center justify-center mx-auto mb-4">
-                    <Users className="w-8 h-8 text-secondary" />
-                  </div>
-                  <h3 className="font-display font-semibold text-lg mb-2">Upload Students</h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Import student data from CSV file
-                  </p>
-                  <Button variant="hod">
-                    <Upload className="w-4 h-4 mr-2" />
-                    Choose File
-                  </Button>
-                </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Branch Overview Panel */}
+            <div className="lg:col-span-1 space-y-6">
+                <Card className="border-none shadow-sm h-full">
+                    <CardHeader>
+                        <CardTitle className="text-xl">Branch Overview</CardTitle>
+                        <CardDescription>Mapping Configuration</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4 pt-4">
+                        <div className="p-4 bg-muted/50 rounded-xl">
+                            <Label className="text-xs text-muted-foreground uppercase tracking-wider">Department / Branch</Label>
+                            <div className="text-lg font-bold text-foreground mt-1">{branch}</div>
+                        </div>
+                        <div className="p-4 bg-primary/10 rounded-xl border border-primary/20">
+                            <Label className="text-xs text-primary uppercase tracking-wider">Assigned Block</Label>
+                            <div className="text-lg font-bold text-primary mt-1">{assignedBlock}</div>
+                        </div>
+                        <div className="p-4 bg-muted/50 rounded-xl">
+                            <Label className="text-xs text-muted-foreground uppercase tracking-wider">Max Seating Capacity</Label>
+                            <div className="text-2xl font-bold text-foreground mt-1 flex items-end gap-2">
+                                {stats.totalCapacity} <span className="text-sm font-normal text-muted-foreground mb-1">seats</span>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
 
-                {/* Classroom Upload */}
-                <div className="border-2 border-dashed border-border rounded-2xl p-8 text-center hover:border-primary transition-colors cursor-pointer"
-                  onClick={() => setShowClassroomDialog(true)}>
-                  <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                    <Building2 className="w-8 h-8 text-primary" />
-                  </div>
-                  <h3 className="font-display font-semibold text-lg mb-2">Add Classroom</h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Enter classroom and lab details
-                  </p>
-                  <Button variant="default">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Room
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+            {/* Recent Activity */}
+            <div className="lg:col-span-2">
+                <Card className="border-none shadow-sm h-full">
+                    <CardHeader>
+                        <CardTitle className="text-xl">Infrastructure Activity</CardTitle>
+                        <CardDescription>Latest rooms added and modified</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {activities.length === 0 ? (
+                            <div className="py-8 text-center text-muted-foreground bg-muted/20 rounded-xl">
+                                No recent infrastructure additions mapped yet.
+                            </div>
+                        ) : (
+                            <div className="space-y-6 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-border before:to-transparent pt-4">
+                                {activities.map((activity, index) => (
+                                    <div key={activity.id} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
+                                        <div className="flex items-center justify-center w-10 h-10 rounded-full border border-white bg-slate-100 group-[.is-active]:bg-primary/10 text-slate-500 group-[.is-active]:text-primary shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 transition-colors">
+                                            {activity.icon}
+                                        </div>
+                                        <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded border border-slate-200 shadow-sm bg-white">
+                                            <div className="flex items-center justify-between space-x-2 mb-1">
+                                                <div className="font-bold text-slate-900">{activity.title}</div>
+                                                <time className="text-xs font-medium text-slate-500">{activity.time}</time>
+                                            </div>
+                                            <div className="text-sm text-slate-500">{activity.description}</div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            </div>
         </div>
+
       </div>
-
-      {/* Student Upload Dialog */}
-      <Dialog open={showStudentUpload} onOpenChange={setShowStudentUpload}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Upload Student Data</DialogTitle>
-            <DialogDescription>
-              Import student information from a CSV file. Make sure your file follows the required format.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
-              <Upload className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground mb-3">
-                Click to browse or drag and drop CSV file here
-              </p>
-              <input
-                type="file"
-                accept=".csv"
-                onChange={handleFileUpload}
-                className="hidden"
-                id="student-file-upload"
-              />
-              <Button asChild variant="outline">
-                <label htmlFor="student-file-upload" className="cursor-pointer">
-                  Choose File
-                </label>
-              </Button>
-            </div>
-
-            <div className="flex justify-center">
-              <Button variant="outline" onClick={handleDownloadTemplate}>
-                <Download className="w-4 h-4 mr-2" />
-                Download Template
-              </Button>
-            </div>
-
-            {uploadStatus && (
-              <div className="p-3 bg-muted/50 rounded-lg">
-                <p className="text-sm text-muted-foreground">{uploadStatus}</p>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowStudentUpload(false)}>
-              Cancel
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog >
-
-      {/* Classroom Management Dialog */}
-      < Dialog open={showClassroomDialog} onOpenChange={setShowClassroomDialog} >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add/Edit Classroom</DialogTitle>
-            <DialogDescription>
-              Enter classroom details and available equipment
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="room-name">Room Name</Label>
-                <Input
-                  id="room-name"
-                  value={classroomForm.name}
-                  onChange={(e) => setClassroomForm(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="e.g., 1105"
-                />
-                <p className="text-xs text-muted-foreground">Format: Block-Floor-Room (e.g., 1105)</p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="block">Block</Label>
-                <Select value={classroomForm.block} onValueChange={(value) => setClassroomForm(prev => ({ ...prev, block: value }))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select block" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Block 1">Block 1</SelectItem>
-                    <SelectItem value="Block 2">Block 2</SelectItem>
-                    <SelectItem value="Block 3">Block 3</SelectItem>
-                    <SelectItem value="Block 4">Block 4</SelectItem>
-                    <SelectItem value="Block 5">Block 5</SelectItem>
-                    <SelectItem value="Block 6">Block 6</SelectItem>
-                    <SelectItem value="Block 7">Block 7</SelectItem>
-                    <SelectItem value="Block 8">Block 8</SelectItem>
-                    <SelectItem value="Block 9">Block 9</SelectItem>
-                    <SelectItem value="Block 10">Block 10</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="capacity">Capacity</Label>
-                <Input
-                  id="capacity"
-                  type="number"
-                  value={classroomForm.capacity}
-                  onChange={(e) => setClassroomForm(prev => ({ ...prev, capacity: e.target.value }))}
-                  placeholder="e.g., 40"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="room-type">Room Type</Label>
-                <Select value={classroomForm.type} onValueChange={(value) => setClassroomForm(prev => ({ ...prev, type: value }))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Lecture Hall">Lecture Hall</SelectItem>
-                    <SelectItem value="Lab">Lab</SelectItem>
-                    <SelectItem value="Seminar Room">Seminar Room</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="floor">Floor</Label>
-                <Select value={classroomForm.floor} onValueChange={(value) => setClassroomForm(prev => ({ ...prev, floor: value }))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select floor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">Floor 1</SelectItem>
-                    <SelectItem value="2">Floor 2</SelectItem>
-                    <SelectItem value="3">Floor 3</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="room-number">Room Number</Label>
-                <Input
-                  id="room-number"
-                  value={classroomForm.name}
-                  onChange={(e) => setClassroomForm(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="e.g., 1105"
-                  pattern="[0-9]{4}"
-                />
-                <p className="text-xs text-muted-foreground">Format: Block-Floor-Room (e.g., 1105)</p>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="equipment">Equipment</Label>
-              <Textarea
-                id="equipment"
-                value={classroomForm.equipment}
-                onChange={(e) => setClassroomForm(prev => ({ ...prev, equipment: e.target.value }))}
-                placeholder="e.g., Projector, Whiteboard, Computers"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowClassroomDialog(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleAddClassroom}>
-              Add Classroom
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog >
-
-      {/* Seating View Dialog */}
-      < Dialog open={showSeatingDialog} onOpenChange={setShowSeatingDialog} >
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle>Seating Arrangements</DialogTitle>
-            <DialogDescription>
-              View current seating arrangements for upcoming exams
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-3">
-              {mockClassrooms.slice(0, 3).map((room) => (
-                <div key={room.id} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div>
-                    <p className="font-medium">{room.name}</p>
-                    <p className="text-sm text-muted-foreground">{room.block} • Capacity: {room.capacity}</p>
-                  </div>
-                  <Button variant="outline" size="sm">
-                    <Eye className="w-4 h-4 mr-2" />
-                    View Layout
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowSeatingDialog(false)}>
-              Close
-            </Button>
-            <Button onClick={() => navigate('/admin-generate-seating')}>
-              Manage Seating
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog >
-
-      {/* Invigilation View Dialog */}
-      < Dialog open={showInvigilationDialog} onOpenChange={setShowInvigilationDialog} >
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle>Invigilation Duties</DialogTitle>
-            <DialogDescription>
-              View assigned invigilation duties for faculty members
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-3">
-              {mockInvigilationDuties.map((duty) => (
-                <div key={duty.id} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div>
-                    <p className="font-medium">{duty.exam}</p>
-                    <p className="text-sm text-muted-foreground">{duty.date} • {duty.room}</p>
-                    <p className="text-sm text-muted-foreground">Faculty: {duty.faculty}</p>
-                  </div>
-                  <Badge variant={duty.status === 'Assigned' ? 'default' : 'secondary'}>
-                    {duty.status}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowInvigilationDialog(false)}>
-              Close
-            </Button>
-            <Button onClick={() => navigate('/admin-dashboard')}>
-              Manage Duties
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog >
-
-      {/* Upload Details Dialog */}
-      < Dialog open={showUploadDetails} onOpenChange={setShowUploadDetails} >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Upload Details</DialogTitle>
-            <DialogDescription>
-              Complete information about the uploaded file
-            </DialogDescription>
-          </DialogHeader>
-          {selectedUpload && (
-            <div className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">File Name</Label>
-                  <p className="font-semibold">{selectedUpload.name}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Upload Date</Label>
-                  <p className="font-semibold">{selectedUpload.date}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Type</Label>
-                  <p className="font-semibold capitalize">{selectedUpload.type}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Records</Label>
-                  <p className="font-semibold">{selectedUpload.records}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Department</Label>
-                  <p className="font-semibold">{selectedUpload.department}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Status</Label>
-                  <Badge variant={selectedUpload.status === 'Processed' ? 'default' : 'secondary'}>
-                    {selectedUpload.status}
-                  </Badge>
-                </div>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowUploadDetails(false)}>
-              Close
-            </Button>
-            <Button>
-              <Download className="w-4 h-4 mr-2" />
-              Download Report
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </HODLayout >
+    </HODLayout>
   );
-};
-
-export default HODDashboard;
+}

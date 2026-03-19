@@ -5,6 +5,9 @@ import { FileUp, Info, Activity, AlertCircle, Database } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { auth, db } from '@/lib/firebase';
+import { collection, query, where, getDocs, doc, writeBatch, getDoc } from 'firebase/firestore';
+import * as XLSX from 'xlsx';
 
 export default function AdminBulkImport() {
     const { college, user } = useAuth();
@@ -37,6 +40,90 @@ export default function AdminBulkImport() {
             return;
         }
         setSelectedFile(file);
+    };
+
+    const handleUploadExecution = async () => {
+        if (!auth.currentUser || !selectedFile || importType !== 'students') {
+            alert('Currently only Student Upload mapping is active in this module or missing file/auth!');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const data = e.target?.result;
+            if (!data) return;
+
+            try {
+                const userDoc = await getDoc(doc(db, 'users', auth.currentUser!.uid));
+                if (!userDoc.exists()) {
+                    alert('Error: Active user session could not be found.');
+                    return;
+                }
+
+                const currentUser = userDoc.data();
+                if (!currentUser.institutionId) {
+                    alert('Error: Critical verification failed - institutionId is missing for the active user instance.');
+                    return;
+                }
+                
+                console.log("Writing with institutionId:", currentUser.institutionId);
+
+                const workbook = XLSX.read(data, { type: 'binary' });
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+
+                // Filter out empty rows, enforcing requested metadata loosely defined
+                const validRows = jsonData.filter(row => row.name || row.Name || row.rollNumber || row['Roll Number']);
+
+                if (validRows.length === 0) {
+                    alert('No valid student metadata parsed. Double check CSV structural headers.');
+                    return;
+                }
+
+                const batch = writeBatch(db);
+                let validAdds = 0;
+
+                for (const row of validRows) {
+                    const mappedName = String(row.name || row.Name || 'Unknown');
+                    const mappedRoll = String(row.rollNumber || row['Roll Number']);
+                    const mappedBranch = String(row.branch || row.Branch || 'N/A');
+                    const mappedYear = Number(row.year || row.Year || 1);
+
+                    // Skip duplicates dynamically
+                    const dupQ = query(collection(db, 'students'), 
+                        where('institutionId', '==', currentUser.institutionId),
+                        where('rollNumber', '==', mappedRoll)
+                    );
+                    const snap = await getDocs(dupQ);
+                    if (!snap.empty) continue; // skip
+
+                    const newDocRef = doc(collection(db, 'students'));
+                    batch.set(newDocRef, {
+                        // STRICT OVERRIDE FOR STUDENTS UPLOAD REQUESTED:
+                        institutionId: currentUser.institutionId,
+                        name: mappedName,
+                        rollNumber: mappedRoll,
+                        branch: mappedBranch,
+                        year: mappedYear
+                    });
+                    validAdds++;
+                }
+
+                if (validAdds > 0) {
+                    await batch.commit();
+                    alert(`Successfully batch uploaded ${validAdds} students!`);
+                } else {
+                    alert('No new students to upload. Roll numbers completely exist.');
+                }
+                
+                setSelectedFile(null); // Reset
+            } catch (err: any) {
+                console.error(err);
+                alert(`Upload execution failed. Error: ${err.message}`);
+            }
+        };
+        reader.readAsBinaryString(selectedFile);
     };
 
     return (
@@ -88,7 +175,7 @@ export default function AdminBulkImport() {
                             </div>
                             <div className="bg-primary/10 border border-primary/20 p-4 rounded-lg mt-4 flex items-start gap-3">
                                 <Info className="w-5 h-5 text-primary shrink-0" />
-                                <p className="text-xs text-primary font-medium leading-relaxed">Downloads templates for expected schema formatting are generated and enforced strictly per active backend validation.</p>
+                                <p className="text-xs text-primary font-medium leading-relaxed">Downloads templates for expected schema formatting are generated and enforced strictly per active backend validation. For students CSV, ensure exactly headers: `Name`, `Roll Number`, `Branch`, `Year`.</p>
                             </div>
                         </CardContent>
                     </Card>
@@ -139,7 +226,7 @@ export default function AdminBulkImport() {
                                             A pre-upload dry-run is executing to check for malformed data against institutional constraints...
                                         </div>
 
-                                        <Button className="w-full">Initialize Upload Queue</Button>
+                                        <Button className="w-full" onClick={handleUploadExecution}>Initialize Upload Queue</Button>
                                     </div>
                                 </div>
                             )}

@@ -69,8 +69,8 @@ const AdminDashboard: React.FC = () => {
           else classCount++;
 
           // estimate capacity
-          if (data.columns && data.rows) {
-            seatCapacity += (data.columns * data.rows * 2);
+          if (data.columnsOfBenches && data.rowsOfBenches) {
+            seatCapacity += (data.columnsOfBenches * data.rowsOfBenches * 2);
           }
         });
 

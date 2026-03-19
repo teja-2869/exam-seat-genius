@@ -4,7 +4,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { CheckCircle2, XCircle, Send, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
-import { doc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, collection, addDoc, serverTimestamp, getDoc } from 'firebase/firestore';
+import { auth } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 
 export interface FacultyAttendanceProps {
@@ -36,19 +37,31 @@ export const FacultyAttendance: React.FC<FacultyAttendanceProps> = ({ isOpen, on
         setAttendance(prev => ({ ...prev, [studentId]: !prev[studentId] }));
     };
 
-    const submitAttendance = async () => {
+        const submitAttendance = async () => {
+        if (!auth.currentUser) {
+            toast({ title: 'Auth Error', description: 'Not signed in', variant: 'destructive' });
+            return;
+        }
         setLoading(true);
         try {
-            const castedUser = user as any;
-            const collId = castedUser?.institutionId || castedUser?.collegeId || college?.id;
-            const uid = castedUser?.id;
+            const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+            if (!userDoc.exists()) {
+                toast({ title: 'Session Error', description: 'User data not found.', variant: 'destructive' });
+                setLoading(false);
+                return;
+            }
+            const currentUser = userDoc.data();
+            if (!currentUser.institutionId) {
+                alert("Error: Critical verification failed - institutionId is missing for the active user instance.");
+                setLoading(false);
+                return;
+            }
 
-            if (!collId || !uid) throw new Error("Missing auth context for attendance submission.");
+            console.log("Writing with institutionId:", currentUser.institutionId);
 
-            // Example submission logic hooking strictly to user parameters
             const attendanceData = {
-                institutionId: collId,
-                facultyId: uid,
+                institutionId: currentUser.institutionId,
+                facultyId: auth.currentUser.uid,
                 examId: examId,
                 timestamp: serverTimestamp(),
                 records: Object.entries(attendance).map(([studentId, isPresent]) => ({
@@ -57,8 +70,7 @@ export const FacultyAttendance: React.FC<FacultyAttendanceProps> = ({ isOpen, on
                 }))
             };
 
-            // Mocking actual submission success message out of the timeout to fulfill requirements gracefully since collection might not exist
-            // await addDoc(collection(db, 'attendance'), attendanceData);
+            await addDoc(collection(db, 'attendance'), attendanceData);
 
             const presentCount = Object.values(attendance).filter(Boolean).length;
 
