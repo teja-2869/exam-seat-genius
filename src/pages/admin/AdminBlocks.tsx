@@ -234,6 +234,7 @@ export default function AdminBlocks() {
                     totalFloors: floorsCount,
                     status: row.status || 'Active',
                     floors: floorsArray,
+                    createdBy: auth.currentUser!.uid,
                     createdAt: serverTimestamp()
                 });
                 validAdds++;
