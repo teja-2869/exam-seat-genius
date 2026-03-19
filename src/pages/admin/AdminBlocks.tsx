@@ -143,6 +143,7 @@ export default function AdminBlocks() {
                 totalFloors: Number(formData.floorsCount),
                 status: formData.status,
                 floors: floorsArray,
+                createdBy: auth.currentUser!.uid,
                 createdAt: serverTimestamp()
             });
             setShowDialog(false);
