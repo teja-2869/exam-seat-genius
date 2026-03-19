@@ -7,21 +7,23 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Function to get user's institution ID from custom claims or user doc
+    // Function to get user's institution ID from custom claims or fallback user doc
     function getUserInstitution() {
-      // In a real scenario with Custom Claims it would be request.auth.token.institutionId
-      // Here we allow evaluating against request.auth.uid if custom claims aren't fully populated yet.
-      return request.auth.token.institutionId; 
+      return request.auth.token.institutionId != null
+        ? request.auth.token.institutionId
+        : get(/databases/$(database)/documents/users/$(request.auth.uid)).data.institutionId;
     }
 
-    // Function to get user's role from custom claims
+    // Function to get user's role from custom claims or fallback user doc
     function getUserRole() {
-      return request.auth.token.role;
+      return request.auth.token.role != null
+        ? request.auth.token.role
+        : get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
 
     // Is the requested document in the user's institution?
     function isSameInstitution(resourceData) {
-      return resourceData.institutionId == getUserInstitution();
+      return getUserInstitution() != null && resourceData.institutionId == getUserInstitution();
     }
 
     // Role checks

@@ -28,9 +28,11 @@ import { collection, query, where, getDocs, addDoc, deleteDoc, doc, serverTimest
 import * as XLSX from 'xlsx';
 import { Upload, Download, ArrowLeft, Layers, DoorOpen } from 'lucide-react';
 import { ClassroomRenderer } from '@/components/classroom/ClassroomRenderer';
+import { useToast } from '@/hooks/use-toast';
 
 export default function AdminBlocks() {
     const { college, user } = useAuth();
+    const { toast } = useToast();
     const [blocks, setBlocks] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [showDialog, setShowDialog] = useState(false);
@@ -54,26 +56,74 @@ export default function AdminBlocks() {
     const [selectedRoom, setSelectedRoom] = useState<any | null>(null);
     const [rooms, setRooms] = useState<any[]>([]);
 
+    const ensureAdminSession = async () => {
+        const firebaseUser = auth.currentUser;
+        console.log('Current User:', firebaseUser);
+
+        if (!firebaseUser) {
+            throw new Error('You must be logged in as an admin to upload block data.');
+        }
+
+        await firebaseUser.getIdToken(true);
+        const tokenResult = await firebaseUser.getIdTokenResult();
+        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+
+        if (!userDoc.exists()) {
+            throw new Error('User session invalid.');
+        }
+
+        const currentUser = userDoc.data() as {
+            institutionId?: string;
+            role?: string;
+        };
+
+        if (!currentUser.institutionId) {
+            throw new Error('institutionId is missing for the active user.');
+        }
+
+        const normalizedRole = String(currentUser.role || tokenResult.claims.role || '').toUpperCase();
+        if (normalizedRole !== 'ADMIN') {
+            throw new Error('Only admin users can manage blocks.');
+        }
+
+        return {
+            firebaseUser,
+            currentUser,
+            claims: tokenResult.claims,
+        };
+    };
 
     const fetchBlocks = async () => {
-        let institutionId = college?.id || (user as any)?.institutionId;
-        if (!institutionId) { setLoading(false); return; }
+        const institutionId = college?.id || (user as any)?.institutionId;
+        if (!institutionId) {
+            setLoading(false);
+            return;
+        }
+
         try {
+            await ensureAdminSession();
             const bQuery = query(collection(db, 'blocks'), where('institutionId', '==', institutionId));
             const snap = await getDocs(bQuery);
             setBlocks(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
+            toast({
+                title: 'Unable to load blocks',
+                description: err?.message || 'Permission check failed while loading blocks.',
+                variant: 'destructive',
+            });
         } finally {
             setLoading(false);
         }
     };
 
     const fetchRooms = async (blockNumber: string, floorNumber: number) => {
-        let institutionId = college?.id || (user as any)?.institutionId;
+        const institutionId = college?.id || (user as any)?.institutionId;
         if (!institutionId) return;
+
         try {
-            const rQuery = query(collection(db, 'classrooms'), 
+            await ensureAdminSession();
+            const rQuery = query(collection(db, 'classrooms'),
                 where('institutionId', '==', institutionId),
                 where('blockNumber', '==', blockNumber),
                 where('floorNumber', '==', String(floorNumber))
@@ -90,49 +140,37 @@ export default function AdminBlocks() {
     }, [college, user]);
 
     const handleCreateBlock = async () => {
-        if (!auth.currentUser) return;
-
         try {
             setSubmitLoading(true);
 
-            // Fetch current user data from /users collection using auth.currentUser.uid
-            const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-            if (!userDoc.exists()) {
-                alert("User session invalid.");
-                return;
-            }
-            const currentUser = userDoc.data();
-            
-            if (!currentUser.institutionId) {
-                alert("Error: Critical verification failed - institutionId is missing for the active user instance.");
-                setSubmitLoading(false);
-                return;
-            }
-            console.log("Writing with institutionId:", currentUser.institutionId);
+            const { firebaseUser, currentUser } = await ensureAdminSession();
 
-            // generate rudimentary floors array
             const floorsArray = Array.from({ length: Number(formData.floorsCount) }, (_, i) => ({
                 floorNumber: i + 1,
                 classrooms: [],
                 labs: []
             }));
 
-            // Check for missing fields
             if (!formData.blockNumber || !formData.floorsCount) {
-                alert('Missing required fields');
-                setSubmitLoading(false);
+                toast({
+                    title: 'Missing required fields',
+                    description: 'Block number and floors count are required.',
+                    variant: 'destructive',
+                });
                 return;
             }
-            
-            // Prevent duplicate blockNumber within same institution
-            const dupQuery = query(collection(db, 'blocks'), 
-                where('institutionId', '==', currentUser.institutionId), 
+
+            const dupQuery = query(collection(db, 'blocks'),
+                where('institutionId', '==', currentUser.institutionId),
                 where('blockNumber', '==', formData.blockNumber)
             );
             const dupSnap = await getDocs(dupQuery);
             if (!dupSnap.empty) {
-                alert('Block number already exists in this institution.');
-                setSubmitLoading(false);
+                toast({
+                    title: 'Duplicate block',
+                    description: 'Block number already exists in this institution.',
+                    variant: 'destructive',
+                });
                 return;
             }
 
@@ -143,16 +181,24 @@ export default function AdminBlocks() {
                 totalFloors: Number(formData.floorsCount),
                 status: formData.status,
                 floors: floorsArray,
-                createdBy: auth.currentUser!.uid,
+                createdBy: firebaseUser.uid,
                 createdAt: serverTimestamp()
             });
+
             setShowDialog(false);
             setFormData({ blockNumber: '', blockName: '', floorsCount: 1, status: 'Active' });
             await fetchBlocks();
-            alert('Block saved successfully!');
-        } catch (err) {
+            toast({
+                title: 'Block saved',
+                description: 'The block was created successfully.',
+            });
+        } catch (err: any) {
             console.error(err);
-            alert('Failed to save block.');
+            toast({
+                title: 'Failed to save block',
+                description: err?.message || 'Permission denied while creating block.',
+                variant: 'destructive',
+            });
         } finally {
             setSubmitLoading(false);
         }
@@ -180,8 +226,7 @@ export default function AdminBlocks() {
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
             const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
-            
-            // Validate rows
+
             const validData = jsonData.filter(row => row.blockNumber && row.totalFloors);
             setPreviewData(validData);
         };
@@ -189,35 +234,21 @@ export default function AdminBlocks() {
     };
 
     const handleBulkUpload = async () => {
-        if (!auth.currentUser || previewData.length === 0) return;
+        if (previewData.length === 0) return;
         setUploadLoading(true);
 
         try {
-            const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-            if (!userDoc.exists()) {
-                alert("User session not found.");
-                setUploadLoading(false);
-                return;
-            }
-            const currentUser = userDoc.data();
-
-            if (!currentUser.institutionId) {
-                alert("Error: Critical verification failed - institutionId is missing for the active user instance.");
-                setUploadLoading(false);
-                return;
-            }
-            console.log("Writing with institutionId:", currentUser.institutionId);
-
+            const { firebaseUser, currentUser } = await ensureAdminSession();
             const batch = writeBatch(db);
             let validAdds = 0;
-            
+
             for (const row of previewData) {
-                const dupQuery = query(collection(db, 'blocks'), 
-                    where('institutionId', '==', currentUser.institutionId), 
+                const dupQuery = query(collection(db, 'blocks'),
+                    where('institutionId', '==', currentUser.institutionId),
                     where('blockNumber', '==', String(row.blockNumber))
                 );
                 const dupSnap = await getDocs(dupQuery);
-                if (!dupSnap.empty) continue; 
+                if (!dupSnap.empty) continue;
 
                 const floorsCount = Number(row.totalFloors) || 1;
                 const floorsArray = Array.from({ length: floorsCount }, (_, i) => ({
@@ -234,7 +265,7 @@ export default function AdminBlocks() {
                     totalFloors: floorsCount,
                     status: row.status || 'Active',
                     floors: floorsArray,
-                    createdBy: auth.currentUser!.uid,
+                    createdBy: firebaseUser.uid,
                     createdAt: serverTimestamp()
                 });
                 validAdds++;
@@ -242,17 +273,27 @@ export default function AdminBlocks() {
 
             if (validAdds > 0) {
                 await batch.commit();
-                alert(`Successfully uploaded ${validAdds} blocks!`);
+                toast({
+                    title: 'Upload complete',
+                    description: `Successfully uploaded ${validAdds} block${validAdds > 1 ? 's' : ''}.`,
+                });
             } else {
-                alert('No new blocks to upload. All blocks in the file may already exist.');
+                toast({
+                    title: 'Nothing uploaded',
+                    description: 'All blocks in the file already exist.',
+                });
             }
-            
+
             setShowDialog(false);
             setPreviewData([]);
             await fetchBlocks();
         } catch (err: any) {
             console.error(err);
-            alert(`Failed to upload block data. Error: ${err?.message || JSON.stringify(err)}`);
+            toast({
+                title: 'Failed to upload block data',
+                description: err?.message || 'Missing or insufficient permissions.',
+                variant: 'destructive',
+            });
         } finally {
             setUploadLoading(false);
         }
