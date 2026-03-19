@@ -53,8 +53,8 @@ export default function AdminBlocks() {
     const [selectedFloor, setSelectedFloor] = useState<any | null>(null);
     const [selectedRoom, setSelectedRoom] = useState<any | null>(null);
     const [rooms, setRooms] = useState<any[]>([]);
-        let institutionId = college?.id || (user as any)?.institutionId;
-        if (!institutionId) { setLoading(false); return; }
+
+
     const fetchBlocks = async () => {
         let institutionId = college?.id || (user as any)?.institutionId;
         if (!institutionId) { setLoading(false); return; }
