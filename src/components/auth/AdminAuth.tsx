@@ -194,6 +194,8 @@ export const AdminAuth: React.FC = () => {
     try {
       // Re-authenticate and proceed
       const userCredential = await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
+      // Force token refresh to pick up latest custom claims
+      await userCredential.user.getIdToken(true);
       const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
       const user = userDoc.data() as any;
 
