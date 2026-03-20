@@ -7,4 +7,4 @@ admin.initializeApp();
 export * from "./generateSeatingPlan";
 export * from "./sendFacultyOTP";
 export * from "./setCustomClaims";
-// export * from "./setCustomClaims"; // Uncomment when implemented
+export * from "./sendHodOTP";
