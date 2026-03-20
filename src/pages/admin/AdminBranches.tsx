@@ -17,7 +17,7 @@ import {
   collection, query, where, getDocs, addDoc, deleteDoc, doc, updateDoc,
   serverTimestamp, writeBatch
 } from 'firebase/firestore';
-import * as XLSX from 'xlsx';
+import { ExcelUpload } from '@/components/ui/ExcelUpload';
 import { useToast } from '@/hooks/use-toast';
 
 const BRANCH_COLORS = [
@@ -108,36 +108,7 @@ export default function AdminBranches() {
     fetchStats();
   }, [selectedBranch, institutionId]);
 
-  // ─── HOD EXCEL UPLOAD (AUTO-CREATES BRANCHES + HODS) ────
-  const downloadHodTemplate = () => {
-    const tpl = [
-      ['hodName', 'hodId', 'gender', 'email', 'password', 'phoneNumber', 'assignedBranch', 'assignedBlock', 'status'],
-      ['Dr. Alan Turing', 'HOD-CS-01', 'Male', 'turing@college.edu', 'SecurePass123', '9876543210', 'CSE', 'Block-1', 'Active'],
-      ['Dr. Grace Hopper', 'HOD-EC-01', 'Female', 'hopper@college.edu', 'SecurePass456', '9876543211', 'ECE', 'Block-2', 'Active']
-    ];
-    const ws = XLSX.utils.aoa_to_sheet(tpl);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'HODs');
-    XLSX.writeFile(wb, 'hod_branch_template.csv');
-  };
 
-  const handleHodFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const wb = XLSX.read(evt.target?.result, { type: 'binary' });
-      const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]) as any[];
-      // Require at minimum: hodName, hodId, email, assignedBranch
-      const valid = data.filter(r => r.hodName && r.hodId && r.email && r.assignedBranch);
-      if (valid.length === 0) {
-        toast({ title: 'Invalid File', description: 'No valid rows found. Ensure hodName, hodId, email, assignedBranch columns exist.', variant: 'destructive' });
-        return;
-      }
-      setHodUploadPreview(valid);
-    };
-    reader.readAsBinaryString(file);
-  };
 
   const handleHodBulkUpload = async () => {
     if (!institutionId || hodUploadPreview.length === 0) return;
@@ -158,6 +129,7 @@ export default function AdminBranches() {
       let hodsCreated = 0;
       let hodsUpdated = 0;
       const errors: string[] = [];
+      const processedEmails = new Set<string>();
 
       for (const row of hodUploadPreview) {
         const branchName = String(row.assignedBranch).trim();
@@ -168,6 +140,25 @@ export default function AdminBranches() {
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(hodEmail)) {
           errors.push(`Invalid email: ${hodEmail}`);
           continue;
+        }
+
+        // Validate duplicates within the CSV itself
+        if (processedEmails.has(hodEmail)) {
+            errors.push(`Duplicate email found in file: ${hodEmail}`);
+            continue;
+        }
+        processedEmails.add(hodEmail);
+
+        // Validate duplicate against Firestore 
+        const existingEmailSnap = await getDocs(query(
+            collection(db, 'hods'),
+            where('institutionId', '==', institutionId),
+            where('email', '==', hodEmail)
+        ));
+        
+        if (!existingEmailSnap.empty && existingEmailSnap.docs[0].data().branch !== branchName) {
+            errors.push(`Duplicate email: ${hodEmail} already assigned to another branch.`);
+            continue;
         }
 
         // Validate block exists if assignedBlock provided
@@ -381,57 +372,34 @@ export default function AdminBranches() {
               Upload an Excel/CSV file with HOD details. Branches will be auto-created from the <strong>assignedBranch</strong> column.
             </p>
             <div className="space-y-4 mt-4">
-              <div className="p-6 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center bg-muted/20">
-                <Upload className="w-8 h-8 text-muted-foreground mb-4" />
-                <h3 className="font-semibold mb-1">Upload HOD Data File</h3>
-                <p className="text-sm text-muted-foreground mb-4">Supports .csv or .xlsx files</p>
-                <Input type="file" accept=".csv,.xlsx" className="max-w-xs cursor-pointer" onChange={handleHodFileUpload} />
-              </div>
-              <div className="flex justify-between items-center bg-blue-50/50 p-4 rounded-lg border border-blue-100">
-                <div className="text-sm text-blue-800">
-                  <p className="font-semibold">Need a template?</p>
-                  <p>Download sample file with required headers.</p>
-                </div>
-                <Button variant="outline" size="sm" onClick={downloadHodTemplate} className="bg-white">
-                  <Download className="w-4 h-4 mr-2" /> Template
-                </Button>
-              </div>
-
-              {hodUploadPreview.length > 0 && (
-                <div className="border rounded-xl overflow-x-auto max-h-48 overflow-y-auto">
-                  <table className="w-full text-sm text-left">
-                    <thead className="text-xs text-muted-foreground bg-muted/50 sticky top-0">
-                      <tr>
-                        <th className="px-4 py-2">HOD Name</th>
-                        <th className="px-4 py-2">HOD ID</th>
-                        <th className="px-4 py-2">Email</th>
-                        <th className="px-4 py-2">Branch</th>
-                        <th className="px-4 py-2">Block</th>
-                        <th className="px-4 py-2">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {hodUploadPreview.map((r, i) => (
-                        <tr key={i} className="border-b">
-                          <td className="px-4 py-2">{r.hodName}</td>
-                          <td className="px-4 py-2">{r.hodId}</td>
-                          <td className="px-4 py-2">{r.email}</td>
-                          <td className="px-4 py-2">{r.assignedBranch}</td>
-                          <td className="px-4 py-2">{r.assignedBlock || '-'}</td>
-                          <td className="px-4 py-2">{r.status || 'Active'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              <ExcelUpload
+                  templateHeaders={['hodName', 'hodId', 'gender', 'email', 'password', 'phoneNumber', 'assignedBranch', 'assignedBlock', 'status']}
+                  templateName="hod_branch_template.xlsx"
+                  schemaMapping={{
+                      'hodName': 'hodName',
+                      'hodId': 'hodId',
+                      'gender': 'gender',
+                      'email': 'email',
+                      'password': 'password',
+                      'phoneNumber': 'phoneNumber',
+                      'assignedBranch': 'assignedBranch',
+                      'assignedBlock': 'assignedBlock',
+                      'status': 'status'
+                  }}
+                  requiredFields={['hodName', 'hodId', 'email', 'assignedBranch']}
+                  onDataParsed={setHodUploadPreview}
+                  previewData={hodUploadPreview}
+                  onUpload={handleHodBulkUpload}
+                  uploadLoading={hodUploading}
+                  previewColumns={[
+                      { key: 'hodName', label: 'HOD Name' },
+                      { key: 'hodId', label: 'HOD ID' },
+                      { key: 'email', label: 'Email' },
+                      { key: 'assignedBranch', label: 'Branch' },
+                      { key: 'assignedBlock', label: 'Block' }
+                  ]}
+              />
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => { setShowUploadDialog(false); setHodUploadPreview([]); }}>Cancel</Button>
-              <Button onClick={handleHodBulkUpload} disabled={hodUploadPreview.length === 0 || hodUploading}>
-                {hodUploading ? 'Processing...' : `Upload ${hodUploadPreview.length} HOD(s)`}
-              </Button>
-            </DialogFooter>
           </DialogContent>
         </Dialog>
 

@@ -27,6 +27,7 @@ const AdminDashboard: React.FC = () => {
     labs: 0,
     students: 0,
     faculty: 0,
+    hods: 0,
     staff: 0,
     branches: 0,
     exams: 0,
@@ -101,6 +102,7 @@ const AdminDashboard: React.FC = () => {
           labs: labCount,
           students: studentSnap.size,
           faculty: facultySnap.size,
+          hods: hodSnap.size,
           branches: branchSnap.size,
           staff: 0, // placeholder non-teaching
           exams: examSnap.size,
@@ -188,8 +190,8 @@ const AdminDashboard: React.FC = () => {
               </Card>
               <Card className="dashboard-card shadow-sm">
                 <CardContent className="p-4 flex flex-col justify-center">
-                  <span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1">Staff</span>
-                  <div className="flex items-center gap-3"><Users className="w-5 h-5 text-gray-500" /><span className="text-2xl font-bold">{stats.staff}</span></div>
+                  <span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1">Total HODs</span>
+                  <div className="flex items-center gap-3"><Users className="w-5 h-5 text-gray-500" /><span className="text-2xl font-bold">{stats.hods}</span></div>
                 </CardContent>
               </Card>
               <Card className="dashboard-card shadow-sm">

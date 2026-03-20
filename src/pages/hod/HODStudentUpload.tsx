@@ -9,7 +9,7 @@ export default function HODStudentUpload() {
       <PlaceholderPage
         breadcrumb={['HOD', 'Department', 'Upload Students']}
         title="Upload Students"
-        description="Import student data via CSV for your department."
+        description="Import student data via Excel for your department."
         icon={<Upload className="w-8 h-8 text-muted-foreground" />}
       />
     </HODLayout>

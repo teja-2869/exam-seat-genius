@@ -27,7 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { auth, db } from '@/lib/firebase';
 import { collection, query, where, getDocs, addDoc, deleteDoc, doc, serverTimestamp, writeBatch } from 'firebase/firestore';
-import * as XLSX from 'xlsx';
+import { ExcelUpload } from '@/components/ui/ExcelUpload';
 import { ClassroomRenderer } from '@/components/classroom/ClassroomRenderer';
 
 export default function HODRooms() {
@@ -154,34 +154,7 @@ export default function HODRooms() {
         }
     };
 
-    const downloadDemoTemplate = () => {
-        const template = [
-            ['floorNumber', 'roomNumber', 'roomType', 'rowsOfBenches', 'columnsOfBenches', 'boardPosition', 'doorPosition'],
-            ['1', '101', 'Classroom', '5', '8', 'top', 'front'],
-            ['2', '204', 'Lab', '4', '6', 'left', 'back']
-        ];
-        const worksheet = XLSX.utils.aoa_to_sheet(template);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Rooms');
-        XLSX.writeFile(workbook, 'rooms_template.csv');
-    };
 
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const data = e.target?.result;
-            const workbook = XLSX.read(data, { type: 'binary' });
-            const sheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[sheetName];
-            const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
-            
-            const validData = jsonData.filter(row => row.floorNumber && row.roomNumber && row.rowsOfBenches && row.columnsOfBenches);
-            setPreviewData(validData);
-        };
-        reader.readAsBinaryString(file);
-    };
 
     const handleBulkUpload = async () => {
         const userData = user as any;
@@ -298,7 +271,18 @@ export default function HODRooms() {
                             ) : (
                                 <div className="space-y-6">
                                     {myBlock.floors?.map((floor: any, fIdx: number) => {
-                                        const floorRooms = rooms.filter(r => String(r.floorNumber) === String(floor.floorNumber));
+                                        const floorRooms = rooms
+                                            .filter(r => String(r.floorNumber) === String(floor.floorNumber))
+                                            .sort((a, b) => String(a.roomNumber).localeCompare(String(b.roomNumber), undefined, { numeric: true }));
+                                            
+                                        const getRoomColor = (type: string) => {
+                                            const t = (type || '').trim().toLowerCase();
+                                            if (t === 'classroom') return 'bg-blue-500';
+                                            if (t === 'facultyroom' || t === 'faculty room') return 'bg-rose-500';
+                                            if (t === 'hodroom' || t === 'hod room' || t === 'hod cabin') return 'bg-purple-500';
+                                            if (t === 'lab') return 'bg-emerald-500';
+                                            return 'bg-amber-500';
+                                        };
                                         return (
                                             <div key={fIdx} className="bg-[#e4e6ea]/50 rounded-xl p-6 border border-[#d1d5db]">
                                                 <h3 className="text-center font-semibold text-sm text-[#4b5563] mb-4">Floor {floor.floorNumber}</h3>
@@ -306,13 +290,13 @@ export default function HODRooms() {
                                                     <div className="text-center text-xs text-muted-foreground py-4">No rooms added to this floor.</div>
                                                 ) : (
                                                     <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar">
-                                                        {floorRooms.map((room, rIdx) => {
-                                                            const colorClasses = ['bg-blue-500', 'bg-red-500', 'bg-yellow-500', 'bg-green-500', 'bg-purple-500'];
-                                                            const badgeColor = colorClasses[rIdx % colorClasses.length];
+                                                        {floorRooms.map((room) => {
+                                                            const badgeColor = getRoomColor(room.roomType);
                                                             return (
                                                                 <button key={room.id} onClick={() => setSelectedRoom(room)} className="relative flex-shrink-0 w-24 h-24 bg-white rounded-xl shadow-sm border border-transparent hover:border-primary transition-all flex flex-col overflow-hidden group">
-                                                                    <div className="flex-1 flex items-center justify-center text-xl font-bold text-[#1a1c1e] group-hover:scale-110 transition-transform">
-                                                                        {room.roomNumber}
+                                                                    <div className="flex-1 flex flex-col items-center justify-center text-[#1a1c1e] group-hover:scale-110 transition-transform w-full">
+                                                                        <span className="text-xl font-bold">{room.roomNumber}</span>
+                                                                        <span className="text-[10px] text-muted-foreground uppercase truncate w-full px-1">{room.roomType || 'ROOM'}</span>
                                                                     </div>
                                                                     <div className={`h-1.5 w-full ${badgeColor}`}></div>
                                                                     <div 
@@ -342,7 +326,7 @@ export default function HODRooms() {
                         <Tabs defaultValue="manual" className="w-full mt-4" onValueChange={setActiveTab}>
                             <TabsList className="grid w-full grid-cols-2">
                                 <TabsTrigger value="manual">Manual Entry</TabsTrigger>
-                                <TabsTrigger value="upload">Upload File (CSV/Excel)</TabsTrigger>
+                                <TabsTrigger value="upload">Upload File (Excel)</TabsTrigger>
                             </TabsList>
                             
                             <TabsContent value="manual" className="space-y-4 py-4">
@@ -410,60 +394,33 @@ export default function HODRooms() {
                             </TabsContent>
 
                             <TabsContent value="upload" className="space-y-4 py-4">
-                                <div className="p-6 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center bg-muted/20">
-                                    <Upload className="w-8 h-8 text-muted-foreground mb-4" />
-                                    <h3 className="font-semibold mb-1">Upload Rooms Data</h3>
-                                    <p className="text-sm text-muted-foreground mb-4">Supports .csv or .xlsx files</p>
-                                    <Input type="file" accept=".csv, .xlsx" className="max-w-xs cursor-pointer" onChange={handleFileUpload} />
-                                </div>
-                                
-                                <div className="flex justify-between items-center bg-blue-50/50 p-4 rounded-lg border border-blue-100">
-                                    <div className="text-sm text-blue-800">
-                                        <p className="font-semibold">Need a template?</p>
-                                        <p>Download our sample file to see the required format.</p>
-                                    </div>
-                                    <Button variant="outline" size="sm" onClick={downloadDemoTemplate} className="bg-white">
-                                        <Download className="w-4 h-4 mr-2" /> Download Demo Template
-                                    </Button>
-                                </div>
-
-                                {previewData.length > 0 && (
-                                    <div className="mt-4 border rounded-xl overflow-x-auto max-h-48 overflow-y-auto">
-                                        <table className="w-full text-sm text-left">
-                                            <thead className="text-xs text-muted-foreground bg-muted/50 sticky top-0">
-                                                <tr>
-                                                    <th className="px-4 py-2">Floor #</th>
-                                                    <th className="px-4 py-2">Room #</th>
-                                                    <th className="px-4 py-2">Type</th>
-                                                    <th className="px-4 py-2">Rows</th>
-                                                    <th className="px-4 py-2">Cols</th>
-                                                    <th className="px-4 py-2">Board</th>
-                                                    <th className="px-4 py-2">Door</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {previewData.map((row, i) => (
-                                                    <tr key={i} className="border-b">
-                                                        <td className="px-4 py-2">{row.floorNumber}</td>
-                                                        <td className="px-4 py-2">{row.roomNumber}</td>
-                                                        <td className="px-4 py-2">{row.roomType}</td>
-                                                        <td className="px-4 py-2">{row.rowsOfBenches}</td>
-                                                        <td className="px-4 py-2">{row.columnsOfBenches}</td>
-                                                        <td className="px-4 py-2">{row.boardPosition}</td>
-                                                        <td className="px-4 py-2">{row.doorPosition}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                )}
-                                
-                                <DialogFooter className="mt-6">
-                                    <Button variant="outline" onClick={() => setShowDialog(false)} disabled={uploadLoading}>Cancel</Button>
-                                    <Button onClick={handleBulkUpload} disabled={previewData.length === 0 || uploadLoading}>
-                                        {uploadLoading ? 'Uploading...' : `Upload ${previewData.length} Rooms`}
-                                    </Button>
-                                </DialogFooter>
+                                <ExcelUpload 
+                                    templateHeaders={['floorNumber', 'roomNumber', 'roomType', 'rowsOfBenches', 'columnsOfBenches', 'boardPosition', 'doorPosition']}
+                                    templateName="classrooms_template.xlsx"
+                                    schemaMapping={{
+                                        'floorNumber': 'floorNumber',
+                                        'roomNumber': 'roomNumber',
+                                        'roomType': 'roomType',
+                                        'rowsOfBenches': 'rowsOfBenches',
+                                        'columnsOfBenches': 'columnsOfBenches',
+                                        'boardPosition': 'boardPosition',
+                                        'doorPosition': 'doorPosition'
+                                    }}
+                                    requiredFields={['floorNumber', 'roomNumber', 'rowsOfBenches', 'columnsOfBenches']}
+                                    onDataParsed={setPreviewData}
+                                    previewData={previewData}
+                                    onUpload={handleBulkUpload}
+                                    uploadLoading={uploadLoading}
+                                    previewColumns={[
+                                        { key: 'floorNumber', label: 'Floor #' },
+                                        { key: 'roomNumber', label: 'Room #' },
+                                        { key: 'roomType', label: 'Type' },
+                                        { key: 'rowsOfBenches', label: 'Rows' },
+                                        { key: 'columnsOfBenches', label: 'Cols' },
+                                        { key: 'boardPosition', label: 'Board' },
+                                        { key: 'doorPosition', label: 'Door' }
+                                    ]}
+                                />
                             </TabsContent>
                         </Tabs>
                     </DialogContent>

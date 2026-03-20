@@ -7,40 +7,15 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { auth, db } from '@/lib/firebase';
 import { collection, query, where, getDocs, doc, writeBatch } from 'firebase/firestore';
-import * as XLSX from 'xlsx';
+import { ExcelUpload } from '@/components/ui/ExcelUpload';
 
 export default function AdminBulkImport() {
     const { college, user } = useAuth();
 
     const [importType, setImportType] = useState<string>('students');
     const [fileType, setFileType] = useState<string>('csv');
-    const [selectedFile, setSelectedFile] = useState<File | null>(null);
-
-    const handleFileDrag = (e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-    };
-
-    const handleFileDrop = (e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-            validateAndSetFile(e.dataTransfer.files[0]);
-        }
-    };
-
-    const validateAndSetFile = (file: File) => {
-        const ext = file.name.split('.').pop()?.toLowerCase();
-        if (ext !== fileType && !((fileType === 'excel') && (ext === 'xlsx' || ext === 'xls'))) {
-            alert(`Format mismatch. Expected ${fileType} but got ${ext}`);
-            return;
-        }
-        if (file.size > 15 * 1024 * 1024) {
-            alert("File is too large. Maximum size is 15MB. Please batch your data.");
-            return;
-        }
-        setSelectedFile(file);
-    };
+    const [previewData, setPreviewData] = useState<any[]>([]);
+    const [uploadLoading, setUploadLoading] = useState(false);
 
     const handleUploadExecution = async () => {
         const userData = user as any;
@@ -48,76 +23,59 @@ export default function AdminBulkImport() {
             console.log("User data missing ❌");
             return;
         }
-        console.log("User Data:", userData);
 
-        if (!selectedFile || importType !== 'students') {
-            alert('Currently only Student Upload mapping is active in this module or missing file/auth!');
+        if (importType !== 'students') {
+            alert('Currently only Student Upload mapping is active in this module!');
             return;
         }
 
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-            const data = e.target?.result;
-            if (!data) return;
+        if (previewData.length === 0) return;
 
-            try {
+        setUploadLoading(true);
+        try {
+            const batch = writeBatch(db);
+            let validAdds = 0;
 
-                const workbook = XLSX.read(data, { type: 'binary' });
-                const sheetName = workbook.SheetNames[0];
-                const worksheet = workbook.Sheets[sheetName];
-                const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+            for (const row of previewData) {
+                const mappedName = String(row.name || 'Unknown');
+                const mappedRoll = String(row.rollNumber);
+                const mappedBranch = String(row.branch || 'N/A');
+                const mappedYear = Number(row.year || 1);
 
-                // Filter out empty rows, enforcing requested metadata loosely defined
-                const validRows = jsonData.filter(row => row.name || row.Name || row.rollNumber || row['Roll Number']);
+                // Skip duplicates dynamically
+                const dupQ = query(collection(db, 'students'), 
+                    where('institutionId', '==', userData.institutionId),
+                    where('rollNumber', '==', mappedRoll)
+                );
+                const snap = await getDocs(dupQ);
+                if (!snap.empty) continue; // skip
 
-                if (validRows.length === 0) {
-                    alert('No valid student metadata parsed. Double check CSV structural headers.');
-                    return;
-                }
-
-                const batch = writeBatch(db);
-                let validAdds = 0;
-
-                for (const row of validRows) {
-                    const mappedName = String(row.name || row.Name || 'Unknown');
-                    const mappedRoll = String(row.rollNumber || row['Roll Number']);
-                    const mappedBranch = String(row.branch || row.Branch || 'N/A');
-                    const mappedYear = Number(row.year || row.Year || 1);
-
-                    // Skip duplicates dynamically
-                    const dupQ = query(collection(db, 'students'), 
-                        where('institutionId', '==', userData.institutionId),
-                        where('rollNumber', '==', mappedRoll)
-                    );
-                    const snap = await getDocs(dupQ);
-                    if (!snap.empty) continue; // skip
-
-                    const newDocRef = doc(collection(db, 'students'));
-                    batch.set(newDocRef, {
-                        // STRICT OVERRIDE FOR STUDENTS UPLOAD REQUESTED:
-                        institutionId: userData.institutionId,
-                        name: mappedName,
-                        rollNumber: mappedRoll,
-                        branch: mappedBranch,
-                        year: mappedYear
-                    });
-                    validAdds++;
-                }
-
-                if (validAdds > 0) {
-                    await batch.commit();
-                    alert(`Successfully batch uploaded ${validAdds} students!`);
-                } else {
-                    alert('No new students to upload. Roll numbers completely exist.');
-                }
-                
-                setSelectedFile(null); // Reset
-            } catch (err: any) {
-                console.error(err);
-                alert(`Upload execution failed. Error: ${err.message}`);
+                const newDocRef = doc(collection(db, 'students'));
+                batch.set(newDocRef, {
+                    institutionId: userData.institutionId,
+                    name: mappedName,
+                    rollNumber: mappedRoll,
+                    branch: mappedBranch,
+                    year: mappedYear,
+                    academicStatus: 'Active'
+                });
+                validAdds++;
             }
-        };
-        reader.readAsBinaryString(selectedFile);
+
+            if (validAdds > 0) {
+                await batch.commit();
+                alert(`Successfully batch uploaded ${validAdds} students!`);
+            } else {
+                alert('No new students to upload. Roll numbers completely exist.');
+            }
+            
+            setPreviewData([]); // Reset
+        } catch (err: any) {
+            console.error(err);
+            alert(`Upload execution failed. Error: ${err.message}`);
+        } finally {
+            setUploadLoading(false);
+        }
     };
 
     return (
@@ -157,12 +115,9 @@ export default function AdminBulkImport() {
                             </div>
                             <div className="space-y-2">
                                 <label className="text-sm font-semibold text-muted-foreground uppercase">File Format</label>
-                                <Select value={fileType} onValueChange={setFileType}>
+                                <Select value={fileType} onValueChange={setFileType} disabled>
                                     <SelectTrigger><SelectValue placeholder="Format" /></SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="csv">CSV (.csv)</SelectItem>
-                                        <SelectItem value="json">JSON (.json)</SelectItem>
-                                        {/* For Excel processing we would typically map to 'csv' dynamically or process via cloud fn */}
                                         <SelectItem value="excel">Excel (.xlsx)</SelectItem>
                                     </SelectContent>
                                 </Select>
@@ -178,50 +133,35 @@ export default function AdminBulkImport() {
                         <CardHeader>
                             <CardTitle className="text-lg flex items-center justify-between">
                                 <span>Secure Ingestion Zone</span>
-                                {selectedFile && <Button variant="ghost" size="sm" onClick={() => setSelectedFile(null)}>Clear File</Button>}
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            {!selectedFile ? (
-                                <div
-                                    className="border-2 border-dashed border-border rounded-xl h-64 flex flex-col items-center justify-center p-6 text-center transition-colors hover:bg-muted/30"
-                                    onDragOver={handleFileDrag}
-                                    onDrop={handleFileDrop}
-                                >
-                                    <FileUp className="w-12 h-12 text-muted-foreground/50 mb-4" />
-                                    <h3 className="font-semibold text-foreground text-lg mb-1">Upload Pipeline</h3>
-                                    <p className="text-sm text-muted-foreground mb-4">Drag and drop your {fileType.toUpperCase()} file here, or click to browse</p>
-                                    <input
-                                        type="file"
-                                        id="fileUpload"
-                                        className="hidden"
-                                        accept={fileType === 'csv' ? '.csv' : fileType === 'json' ? '.json' : '.xlsx,.xls'}
-                                        onChange={(e) => {
-                                            if (e.target.files?.[0]) validateAndSetFile(e.target.files[0]);
-                                        }}
-                                    />
-                                    <Button variant="outline" onClick={() => document.getElementById('fileUpload')?.click()}>Select File</Button>
-                                </div>
+                            {importType === 'students' ? (
+                                <ExcelUpload 
+                                    templateHeaders={['name', 'rollNumber', 'branch', 'year']}
+                                    templateName="students_template.xlsx"
+                                    schemaMapping={{
+                                        'name': 'name',
+                                        'rollNumber': 'rollNumber',
+                                        'branch': 'branch',
+                                        'year': 'year'
+                                    }}
+                                    requiredFields={['name', 'rollNumber', 'branch']}
+                                    onDataParsed={setPreviewData}
+                                    previewData={previewData}
+                                    onUpload={handleUploadExecution}
+                                    uploadLoading={uploadLoading}
+                                    previewColumns={[
+                                        { key: 'name', label: 'Name' },
+                                        { key: 'rollNumber', label: 'Roll Number' },
+                                        { key: 'branch', label: 'Branch' },
+                                        { key: 'year', label: 'Year' }
+                                    ]}
+                                />
                             ) : (
-                                <div className="space-y-6">
-                                    <div className="bg-muted border border-border rounded-lg p-6">
-                                        <div className="flex items-center gap-4 mb-4">
-                                            <div className="w-12 h-12 bg-primary/10 rounded flex items-center justify-center">
-                                                <FileUp className="w-6 h-6 text-primary" />
-                                            </div>
-                                            <div>
-                                                <h4 className="font-bold text-foreground">{selectedFile.name}</h4>
-                                                <p className="text-sm text-muted-foreground">{Number(selectedFile.size / 1024).toFixed(1)} KB • {fileType.toUpperCase()}</p>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex bg-amber-50 text-amber-800 p-3 rounded-md text-sm mb-4 border border-amber-200">
-                                            <Database className="w-4 h-4 mr-2 shrink-0" />
-                                            A pre-upload dry-run is executing to check for malformed data against institutional constraints...
-                                        </div>
-
-                                        <Button className="w-full" onClick={handleUploadExecution}>Initialize Upload Queue</Button>
-                                    </div>
+                                <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-xl bg-muted/20 flex flex-col items-center justify-center">
+                                    <Database className="w-12 h-12 mb-4 opacity-30" />
+                                    <p>Only Student Upload mapping is currently active in this module.</p>
                                 </div>
                             )}
                         </CardContent>

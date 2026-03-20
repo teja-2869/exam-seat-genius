@@ -57,11 +57,14 @@ export interface Classroom {
   branch?: string;
   floorNumber: number | string;
   roomNumber: string;
-  rows: number;
-  columns: number;
+  roomType?: string;
+  rowsOfBenches?: number;
+  columnsOfBenches?: number;
+  rows?: number;
+  columns?: number;
   boardPosition: 'top' | 'bottom' | 'left' | 'right';
   doorPosition: 'left' | 'right' | 'front' | 'back';
-  benchStructure: BenchStructure[];
+  benchStructure?: BenchStructure[];
   createdAt: any;
 }
 
