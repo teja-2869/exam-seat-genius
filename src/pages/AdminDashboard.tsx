@@ -78,8 +78,12 @@ const AdminDashboard: React.FC = () => {
         const facultyQuery = query(collection(db, 'users'), where('institutionId', '==', institutionId), where('role', '==', 'faculty'));
         const facultySnap = await getDocs(facultyQuery);
 
-        // HODs (Branches proxy)
-        const hodQuery = query(collection(db, 'users'), where('institutionId', '==', institutionId), where('role', '==', 'hod'));
+        // Branches
+        const branchQuery = query(collection(db, 'branches'), where('institutionId', '==', institutionId));
+        const branchSnap = await getDocs(branchQuery);
+
+        // HODs
+        const hodQuery = query(collection(db, 'hods'), where('institutionId', '==', institutionId));
         const hodSnap = await getDocs(hodQuery);
 
         // Students

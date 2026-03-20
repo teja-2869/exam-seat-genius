@@ -150,5 +150,32 @@ service cloud.firestore {
         sameInstitutionForRead();
     }
 
+    //--------------------------------------------
+    // BRANCHES
+    //--------------------------------------------
+    match /branches/{branchId} {
+      allow read: if isAuthenticated() && sameInstitutionForRead();
+      allow create: if isAdmin() && sameInstitutionForWrite();
+      allow update, delete: if isAdmin() && sameInstitutionForRead();
+    }
+
+    //--------------------------------------------
+    // HODS
+    //--------------------------------------------
+    match /hods/{hodId} {
+      allow read: if isAuthenticated() && sameInstitutionForRead();
+      allow create: if isAdmin() && sameInstitutionForWrite();
+      allow update, delete: if isAdmin() && sameInstitutionForRead();
+    }
+
+    //--------------------------------------------
+    // FACULTY
+    //--------------------------------------------
+    match /faculty/{facultyId} {
+      allow read: if isAuthenticated() && sameInstitutionForRead();
+      allow create: if (isAdmin() || isHOD()) && sameInstitutionForWrite();
+      allow update, delete: if (isAdmin() || isHOD()) && sameInstitutionForRead();
+    }
+
   }
 }
