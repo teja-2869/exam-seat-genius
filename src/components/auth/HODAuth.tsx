@@ -1,14 +1,16 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Users, Mail, Lock, Building2, Loader2 } from 'lucide-react';
+import { Users, Mail, Lock, Loader2, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { auth, db } from '@/lib/firebase';
-import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { db, functions } from '@/lib/firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 
 export const HODAuth: React.FC = () => {
   const navigate = useNavigate();
@@ -16,10 +18,16 @@ export const HODAuth: React.FC = () => {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
-  // Login State
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
-  const [branchName, setBranchName] = useState('');
+
+  // OTP state
+  const [showOTP, setShowOTP] = useState(false);
+  const [otpValue, setOtpValue] = useState('');
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [pendingHodData, setPendingHodData] = useState<any>(null);
+  const [pendingCollegeData, setPendingCollegeData] = useState<any>(null);
+  const [demoOtp, setDemoOtp] = useState<string | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,40 +35,127 @@ export const HODAuth: React.FC = () => {
 
     try {
       suppressAutoLogin.current = true;
-      const userCredential = await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
-      
-      const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
-      if (!userDoc.exists()) throw new Error('User not found in database');
+
+      // 1. Find user doc by email in 'users' collection
+      const userSnap = await getDocs(query(
+        collection(db, 'users'),
+        where('email', '==', loginEmail.trim()),
+        where('role', '==', 'HOD')
+      ));
+
+      if (userSnap.empty) {
+        throw new Error('No HOD account found with this email.');
+      }
+
+      const userDoc = userSnap.docs[0];
       const userData = userDoc.data() as any;
 
-      if (userData.role !== 'HOD' && userData.role !== 'hod') {
-        throw new Error('Insufficient permissions. You are not an HOD.');
+      // 2. Verify password
+      if (userData.password !== loginPassword) {
+        throw new Error('Invalid password.');
       }
 
-      // Exact match for branch case-sensitive or insensitive? Let's do exact since it's an internal system
-      if (userData.branch !== branchName) {
-        throw new Error('Branch mismatch! This branch does not match your assigned branch.');
+      // 3. Get HOD details from hods collection
+      const hodSnap = await getDocs(query(
+        collection(db, 'hods'),
+        where('institutionId', '==', userData.institutionId),
+        where('email', '==', loginEmail.trim())
+      ));
+
+      let hodData = userData;
+      if (!hodSnap.empty) {
+        const hod = hodSnap.docs[0].data();
+        hodData = {
+          ...userData,
+          id: userDoc.id,
+          branch: hod.branch || userData.branch,
+          assignedBlock: hod.assignedBlock || userData.assignedBlock,
+          name: hod.name || userData.name,
+        };
+      } else {
+        hodData = { ...userData, id: userDoc.id };
       }
 
-      const collegeDoc = await getDoc(doc(db, 'institutions', userData.institutionId));
-      const college = collegeDoc.exists() ? collegeDoc.data() : { id: userData.institutionId, name: userData.institutionName };
+      // 4. Fetch college
+      let collegeData: any = { id: userData.institutionId, name: userData.institutionName || '' };
+      try {
+        const { getDoc, doc } = await import('firebase/firestore');
+        const collegeDoc = await getDoc(doc(db, 'institutions', userData.institutionId));
+        if (collegeDoc.exists()) {
+          collegeData = { id: userData.institutionId, ...collegeDoc.data() };
+        }
+      } catch {}
 
-      login(userData, college as any);
-      toast({
-        title: 'Login Successful',
-        description: 'Welcome back to the HOD Panel!',
-      });
-      navigate('/hod/dashboard', { replace: true });
+      // 5. Send OTP to email
+      setPendingHodData(hodData);
+      setPendingCollegeData(collegeData);
+
+      try {
+        const requestHodOTP = httpsCallable(functions, 'requestHodOTP');
+        const result = await requestHodOTP({
+          email: loginEmail.trim(),
+          hodId: hodData.hodId || hodData.id,
+          institutionId: userData.institutionId
+        });
+        const data = result.data as any;
+        if (data.demoOtp) {
+          setDemoOtp(data.demoOtp);
+        }
+      } catch (otpErr: any) {
+        console.error('OTP send error:', otpErr);
+        // Fallback: still show OTP dialog but warn user
+        toast({ title: 'OTP Warning', description: 'OTP service unavailable. Use demo mode.', variant: 'destructive' });
+      }
+
+      setShowOTP(true);
+      toast({ title: 'OTP Sent', description: 'Check your registered email for the verification code.' });
+
     } catch (error: any) {
       console.error(error);
-      if (auth.currentUser) await signOut(auth);
       toast({
         title: 'Login Failed',
-        description: error.message || 'Invalid credentials or branch mismatch.',
+        description: error.message || 'Invalid credentials.',
         variant: 'destructive',
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleVerifyOTP = async () => {
+    if (!otpValue || otpValue.length < 6) {
+      toast({ title: 'Invalid OTP', description: 'Please enter the full 6-digit code.', variant: 'destructive' });
+      return;
+    }
+
+    setOtpVerifying(true);
+    try {
+      // Verify OTP via Cloud Function
+      const verifyHodOTP = httpsCallable(functions, 'verifyHodOTP');
+      const result = await verifyHodOTP({
+        email: loginEmail.trim(),
+        otp: otpValue,
+        institutionId: pendingHodData.institutionId
+      });
+
+      const data = result.data as any;
+      if (!data.success) {
+        throw new Error(data.message || 'OTP verification failed.');
+      }
+
+      // OTP verified — complete login
+      login(pendingHodData, pendingCollegeData);
+      toast({ title: 'Login Successful', description: 'Welcome to the HOD Panel!' });
+      navigate('/hod/dashboard', { replace: true });
+    } catch (error: any) {
+      console.error(error);
+      toast({
+        title: 'Verification Failed',
+        description: error.message || 'Incorrect OTP. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setOtpVerifying(false);
     }
   };
 
@@ -117,30 +212,53 @@ export const HODAuth: React.FC = () => {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="branch-name">Branch Name</Label>
-              <div className="relative">
-                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                <Input
-                  id="branch-name"
-                  type="text"
-                  placeholder="e.g. CSE(CYBER)"
-                  className="pl-11"
-                  value={branchName}
-                  onChange={(e) => setBranchName(e.target.value)}
-                  required
-                  disabled={isLoading}
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">This must match your registered branch verbatim.</p>
-            </div>
-
             <Button type="submit" variant="hod" size="lg" className="w-full" disabled={isLoading}>
               {isLoading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
               Sign In
             </Button>
           </form>
         </div>
+
+        {/* OTP Verification Dialog */}
+        <Dialog open={showOTP} onOpenChange={(open) => { if (!open) { setShowOTP(false); setOtpValue(''); setDemoOtp(null); } }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-primary" /> Verify OTP
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-4 space-y-4">
+              <p className="text-sm text-muted-foreground text-center">
+                Enter the 6-digit code sent to <strong>{loginEmail}</strong>
+              </p>
+              {demoOtp && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
+                  <p className="text-xs text-amber-700 font-semibold">Demo Mode OTP</p>
+                  <p className="text-2xl font-mono font-bold text-amber-900 tracking-widest">{demoOtp}</p>
+                </div>
+              )}
+              <div className="flex justify-center">
+                <InputOTP maxLength={6} value={otpValue} onChange={setOtpValue}>
+                  <InputOTPGroup>
+                    <InputOTPSlot index={0} />
+                    <InputOTPSlot index={1} />
+                    <InputOTPSlot index={2} />
+                    <InputOTPSlot index={3} />
+                    <InputOTPSlot index={4} />
+                    <InputOTPSlot index={5} />
+                  </InputOTPGroup>
+                </InputOTP>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setShowOTP(false); setOtpValue(''); }} disabled={otpVerifying}>Cancel</Button>
+              <Button onClick={handleVerifyOTP} disabled={otpVerifying || otpValue.length < 6}>
+                {otpVerifying ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Verify & Login
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
