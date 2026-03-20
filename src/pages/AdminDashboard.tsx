@@ -101,7 +101,7 @@ const AdminDashboard: React.FC = () => {
           labs: labCount,
           students: studentSnap.size,
           faculty: facultySnap.size,
-          branches: hodSnap.size,
+          branches: branchSnap.size,
           staff: 0, // placeholder non-teaching
           exams: examSnap.size,
           capacity: seatCapacity
