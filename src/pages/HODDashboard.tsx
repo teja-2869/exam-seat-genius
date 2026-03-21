@@ -87,10 +87,15 @@ export default function HODDashboard() {
         let capacity = 0;
         const roomsList: any[] = [];
 
+        const isLabType = (type: string) => {
+            const t = (type || '').trim().toLowerCase();
+            return ['lab', 'labs', 'labroom', 'laboratory'].some(k => t.includes(k));
+        };
+
         rSnap.forEach(doc => {
             const data = doc.data();
-            if (data.roomType === 'Classroom') classrooms++;
-            if (data.roomType === 'Lab') labs++;
+            if (isLabType(data.roomType || data.type || '')) labs++;
+            else classrooms++;
             capacity += (Number(data.rowsOfBenches || 0) * Number(data.columnsOfBenches || 0));
             roomsList.push({ ...data, id: doc.id });
         });
