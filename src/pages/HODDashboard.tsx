@@ -56,10 +56,14 @@ export default function HODDashboard() {
             }
         });
 
-        // Faculty Count (Assuming 'department' maps to 'branch')
+        // Faculty Count: check both 'faculty' and 'users' collections
         const fQ = query(collection(db, 'faculty'), where('institutionId', '==', institutionId), where('department', '==', branch));
         const fSnap = await getDocs(fQ);
-        const totalFaculty = fSnap.size;
+        const fQ2 = query(collection(db, 'faculty'), where('institutionId', '==', institutionId), where('branch', '==', branch));
+        const fSnap2 = await getDocs(fQ2);
+        const uQ = query(collection(db, 'users'), where('institutionId', '==', institutionId), where('role', '==', 'faculty'), where('branch', '==', branch));
+        const uSnap = await getDocs(uQ);
+        const totalFaculty = Math.max(fSnap.size, fSnap2.size, uSnap.size);
 
         // Block definition for floors
         let totalFloors = 0;
@@ -83,10 +87,15 @@ export default function HODDashboard() {
         let capacity = 0;
         const roomsList: any[] = [];
 
+        const isLabType = (type: string) => {
+            const t = (type || '').trim().toLowerCase();
+            return ['lab', 'labs', 'labroom', 'laboratory'].some(k => t.includes(k));
+        };
+
         rSnap.forEach(doc => {
             const data = doc.data();
-            if (data.roomType === 'Classroom') classrooms++;
-            if (data.roomType === 'Lab') labs++;
+            if (isLabType(data.roomType || data.type || '')) labs++;
+            else classrooms++;
             capacity += (Number(data.rowsOfBenches || 0) * Number(data.columnsOfBenches || 0));
             roomsList.push({ ...data, id: doc.id });
         });
