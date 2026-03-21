@@ -26,7 +26,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { auth, db } from '@/lib/firebase';
-import { collection, query, where, getDocs, addDoc, deleteDoc, doc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { ExcelUpload } from '@/components/ui/ExcelUpload';
 import { ClassroomRenderer } from '@/components/classroom/ClassroomRenderer';
 
@@ -43,6 +43,8 @@ export default function HODRooms() {
     const [uploadLoading, setUploadLoading] = useState(false);
     const [submitLoading, setSubmitLoading] = useState(false);
     const [selectedRoom, setSelectedRoom] = useState<any | null>(null);
+    const [showEditDialog, setShowEditDialog] = useState(false);
+    const [selectedEditRoomId, setSelectedEditRoomId] = useState<string | null>(null);
 
     const [formData, setFormData] = useState({
         floorNumber: '',
@@ -226,6 +228,47 @@ export default function HODRooms() {
         }
     };
 
+    const handleEditRoom = async () => {
+        if (!selectedEditRoomId) return;
+        setSubmitLoading(true);
+        try {
+            const docRef = doc(db, 'classrooms', selectedEditRoomId);
+            await updateDoc(docRef, {
+                floorNumber: formData.floorNumber,
+                roomNumber: formData.roomNumber,
+                roomType: formData.roomType,
+                rowsOfBenches: Number(formData.rowsOfBenches),
+                columnsOfBenches: Number(formData.columnsOfBenches),
+                boardPosition: formData.boardPosition,
+                doorPosition: formData.doorPosition
+            });
+            setShowEditDialog(false);
+            setFormData({ floorNumber: '', roomNumber: '', roomType: 'Classroom', rowsOfBenches: 5, columnsOfBenches: 8, boardPosition: 'top', doorPosition: 'front' });
+            setSelectedEditRoomId(null);
+            await fetchData();
+            alert('Room updated successfully.');
+        } catch (err) {
+            console.error(err);
+            alert('Failed to update room.');
+        } finally {
+            setSubmitLoading(false);
+        }
+    };
+
+    const openEditRoom = (room: any) => {
+        setFormData({
+            floorNumber: room.floorNumber || '',
+            roomNumber: room.roomNumber || '',
+            roomType: room.roomType || 'Classroom',
+            rowsOfBenches: room.rowsOfBenches || 5,
+            columnsOfBenches: room.columnsOfBenches || 8,
+            boardPosition: room.boardPosition || 'top',
+            doorPosition: room.doorPosition || 'front'
+        });
+        setSelectedEditRoomId(room.id);
+        setShowEditDialog(true);
+    };
+
     return (
         <HODLayout>
             <div className="max-w-7xl mx-auto space-y-8 animate-fade-in pb-12">
@@ -299,6 +342,12 @@ export default function HODRooms() {
                                                                         <span className="text-[10px] text-muted-foreground uppercase truncate w-full px-1">{room.roomType || 'ROOM'}</span>
                                                                     </div>
                                                                     <div className={`h-1.5 w-full ${badgeColor}`}></div>
+                                                                    <div 
+                                                                        onClick={(e) => { e.stopPropagation(); openEditRoom(room); }} 
+                                                                        className="absolute top-1 right-8 opacity-0 group-hover:opacity-100 p-1.5 text-blue-500 hover:bg-blue-50 rounded-full transition-all bg-white"
+                                                                    >
+                                                                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                                                                    </div>
                                                                     <div 
                                                                         onClick={(e) => { e.stopPropagation(); handleDeleteRoom(room.id); }} 
                                                                         className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 p-1.5 text-red-500 hover:bg-red-50 rounded-full transition-all bg-white"
@@ -423,6 +472,77 @@ export default function HODRooms() {
                                 />
                             </TabsContent>
                         </Tabs>
+                    </DialogContent>
+                </Dialog>
+
+                <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+                    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <DialogHeader><DialogTitle>Edit Room Details</DialogTitle></DialogHeader>
+                        <div className="space-y-4 py-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Floor Number</Label>
+                                    <Input value={formData.floorNumber} onChange={e => setFormData({ ...formData, floorNumber: e.target.value })} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Room Number</Label>
+                                    <Input value={formData.roomNumber} onChange={e => setFormData({ ...formData, roomNumber: e.target.value })} />
+                                </div>
+                                <div className="space-y-2 col-span-2 sm:col-span-1">
+                                    <Label>Room Type</Label>
+                                    <Select value={formData.roomType} onValueChange={(val) => setFormData({ ...formData, roomType: val })}>
+                                        <SelectTrigger><SelectValue placeholder="Room Type" /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="Classroom">Classroom</SelectItem>
+                                            <SelectItem value="Lab">Lab</SelectItem>
+                                            <SelectItem value="Faculty Room">Faculty Room</SelectItem>
+                                            <SelectItem value="HOD Room">HOD Room</SelectItem>
+                                            <SelectItem value="Washroom">Washroom</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Rows of Benches</Label>
+                                    <Input type="number" min="1" value={formData.rowsOfBenches} onChange={e => setFormData({ ...formData, rowsOfBenches: Number(e.target.value) })} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Columns of Benches</Label>
+                                    <Input type="number" min="1" value={formData.columnsOfBenches} onChange={e => setFormData({ ...formData, columnsOfBenches: Number(e.target.value) })} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Board Position</Label>
+                                    <Select value={formData.boardPosition} onValueChange={(val) => setFormData({ ...formData, boardPosition: val })}>
+                                        <SelectTrigger><SelectValue placeholder="Board Position" /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="top">Top</SelectItem>
+                                            <SelectItem value="bottom">Bottom</SelectItem>
+                                            <SelectItem value="left">Left</SelectItem>
+                                            <SelectItem value="right">Right</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Door Position</Label>
+                                    <Select value={formData.doorPosition} onValueChange={(val) => setFormData({ ...formData, doorPosition: val })}>
+                                        <SelectTrigger><SelectValue placeholder="Door Position" /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="front">Front</SelectItem>
+                                            <SelectItem value="back">Back</SelectItem>
+                                            <SelectItem value="left">Left</SelectItem>
+                                            <SelectItem value="right">Right</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                            <DialogFooter className="mt-6">
+                                <Button variant="outline" onClick={() => setShowEditDialog(false)} disabled={submitLoading}>Cancel</Button>
+                                <Button onClick={handleEditRoom} disabled={submitLoading}>
+                                    {submitLoading ? 'Updating...' : 'Save Changes'}
+                                </Button>
+                            </DialogFooter>
+                        </div>
                     </DialogContent>
                 </Dialog>
             </div>

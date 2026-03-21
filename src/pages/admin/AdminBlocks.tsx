@@ -24,7 +24,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { auth, db } from '@/lib/firebase';
-import { collection, query, where, getDocs, addDoc, deleteDoc, doc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch, orderBy } from 'firebase/firestore';
 import { ExcelUpload } from '@/components/ui/ExcelUpload';
 import { Upload, Download, ArrowLeft, Layers, DoorOpen } from 'lucide-react';
 import { ClassroomRenderer } from '@/components/classroom/ClassroomRenderer';
@@ -37,6 +37,8 @@ export default function AdminBlocks() {
     const [loading, setLoading] = useState(true);
     const [showDialog, setShowDialog] = useState(false);
     const [showConfirmDelete, setShowConfirmDelete] = useState<string | null>(null);
+    const [showEditDialog, setShowEditDialog] = useState(false);
+    const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
 
     const [formData, setFormData] = useState({
         blockNumber: '',
@@ -66,7 +68,9 @@ export default function AdminBlocks() {
         try {
             const bQuery = query(collection(db, 'blocks'), where('institutionId', '==', userData.institutionId));
             const snap = await getDocs(bQuery);
-            setBlocks(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            const sortedBlocks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            sortedBlocks.sort((a: any, b: any) => String(a.blockNumber).localeCompare(String(b.blockNumber), undefined, { numeric: true }));
+            setBlocks(sortedBlocks);
         } catch (err: any) {
             console.error(err);
             toast({
@@ -246,6 +250,48 @@ export default function AdminBlocks() {
         }
     };
 
+    const handleEditBlock = async () => {
+        if (!selectedBlockId) return;
+        setSubmitLoading(true);
+        try {
+            const docRef = doc(db, 'blocks', selectedBlockId);
+            await updateDoc(docRef, {
+                blockNumber: formData.blockNumber,
+                blockName: formData.blockName,
+                totalFloors: Number(formData.floorsCount),
+                status: formData.status
+            });
+            setShowEditDialog(false);
+            setFormData({ blockNumber: '', blockName: '', floorsCount: 1, status: 'Active' });
+            setSelectedBlockId(null);
+            await fetchBlocks();
+            toast({
+                title: 'Block updated',
+                description: 'The block was modified successfully.',
+            });
+        } catch (err: any) {
+            console.error(err);
+            toast({
+                title: 'Failed to update block',
+                description: err?.message || 'Permission denied while modifying block.',
+                variant: 'destructive',
+            });
+        } finally {
+            setSubmitLoading(false);
+        }
+    };
+
+    const openEdit = (block: any) => {
+        setFormData({
+            blockNumber: block.blockNumber || '',
+            blockName: block.blockName || '',
+            floorsCount: block.totalFloors || 1,
+            status: block.status || 'Active'
+        });
+        setSelectedBlockId(block.id);
+        setShowEditDialog(true);
+    };
+
     const handleDelete = async () => {
         if (!showConfirmDelete) return;
         try {
@@ -367,6 +413,12 @@ export default function AdminBlocks() {
                                                     {block.blockName || 'NO NAME'}
                                                 </div>
                                                 <button 
+                                                    onClick={(e) => { e.stopPropagation(); openEdit(block); }} 
+                                                    className="absolute top-2 right-10 opacity-0 group-hover:opacity-100 p-2 text-blue-500 hover:bg-blue-50 rounded-full transition-all"
+                                                >
+                                                    <Edit className="w-4 h-4" />
+                                                </button>
+                                                <button 
                                                     onClick={(e) => { e.stopPropagation(); setShowConfirmDelete(block.id); }} 
                                                     className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-2 text-red-500 hover:bg-red-50 rounded-full transition-all"
                                                 >
@@ -448,6 +500,42 @@ export default function AdminBlocks() {
                                 />
                             </TabsContent>
                         </Tabs>
+                    </DialogContent>
+                </Dialog>
+
+                <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+                    <DialogContent className="max-w-md">
+                        <DialogHeader><DialogTitle>Edit Infrastructure Block</DialogTitle></DialogHeader>
+                        <div className="space-y-4 py-4">
+                            <div className="space-y-2">
+                                <Label>Block Number</Label>
+                                <Input placeholder="e.g., Block-1" value={formData.blockNumber} onChange={e => setFormData({ ...formData, blockNumber: e.target.value })} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Block Name</Label>
+                                <Input placeholder="e.g., CSE" value={formData.blockName} onChange={e => setFormData({ ...formData, blockName: e.target.value })} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Total Floors</Label>
+                                <Input type="number" min="1" value={formData.floorsCount} onChange={e => setFormData({ ...formData, floorsCount: Number(e.target.value) })} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Status</Label>
+                                <Select value={formData.status} onValueChange={(val) => setFormData({ ...formData, status: val })}>
+                                    <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="Active">Active</SelectItem>
+                                        <SelectItem value="Maintenance">Maintenance</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setShowEditDialog(false)} disabled={submitLoading}>Cancel</Button>
+                            <Button onClick={handleEditBlock} disabled={submitLoading}>
+                                {submitLoading ? 'Updating...' : 'Save Changes'}
+                            </Button>
+                        </DialogFooter>
                     </DialogContent>
                 </Dialog>
 

@@ -68,6 +68,13 @@ export default function AdminBranches() {
   // Delete confirmation
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'branch' | 'hod'; id: string } | null>(null);
 
+  // Edit states
+  const [showEditBranch, setShowEditBranch] = useState(false);
+  const [editBranchData, setEditBranchData] = useState({ id: '', branchName: '', assignedBlock: '' });
+  
+  const [showEditHod, setShowEditHod] = useState(false);
+  const [editHodData, setEditHodData] = useState({ id: '', hodId: '', name: '', gender: '', email: '', phoneNumber: '', assignedBlock: '', status: '' });
+  
   // Stats for detail view
   const [branchStats, setBranchStats] = useState({ faculty: 0, students: 0 });
 
@@ -283,6 +290,42 @@ export default function AdminBranches() {
   // ─── HELPERS ─────────────────────────────────────────────
   const getHODForBranch = (branchName: string) => hods.find(h => h.branch === branchName);
 
+  const handleEditBranch = async () => {
+    try {
+        await updateDoc(doc(db, 'branches', editBranchData.id), {
+            branchName: editBranchData.branchName,
+            assignedBlock: editBranchData.assignedBlock
+        });
+        toast({ title: 'Branch Updated', description: 'Changes saved successfully.' });
+        setShowEditBranch(false);
+        fetchAll();
+        if (selectedBranch && selectedBranch.id === editBranchData.id) {
+            setSelectedBranch(null); // Simple UX flow to refresh state safely
+        }
+    } catch (err: any) {
+        toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    }
+  };
+
+  const handleEditHOD = async () => {
+    try {
+        await updateDoc(doc(db, 'hods', editHodData.id), {
+            hodId: editHodData.hodId,
+            name: editHodData.name,
+            gender: editHodData.gender,
+            email: editHodData.email,
+            phoneNumber: editHodData.phoneNumber,
+            assignedBlock: editHodData.assignedBlock,
+            status: editHodData.status
+        });
+        toast({ title: 'HOD Updated', description: 'Changes saved successfully.' });
+        setShowEditHod(false);
+        fetchAll();
+    } catch (err: any) {
+        toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    }
+  };
+
   // ─── RENDER ──────────────────────────────────────────────
   return (
     <AdminLayout>
@@ -321,6 +364,13 @@ export default function AdminBranches() {
             onBack={() => setSelectedBranch(null)}
             onDeleteBranch={() => setDeleteTarget({ type: 'branch', id: selectedBranch.id })}
             onDeleteHOD={(id) => setDeleteTarget({ type: 'hod', id })}
+            onEditHOD={(hod) => {
+                setEditHodData({ 
+                    id: hod.id, hodId: hod.hodId, name: hod.name, gender: hod.gender || '', email: hod.email, phoneNumber: hod.phoneNumber || '', 
+                    assignedBlock: hod.assignedBlock || '', status: hod.status || 'Active' 
+                });
+                setShowEditHod(true);
+            }}
           />
         ) : branches.length === 0 ? (
           <div className="h-64 flex flex-col items-center justify-center border rounded-xl text-muted-foreground bg-muted/20">
@@ -351,6 +401,16 @@ export default function AdminBranches() {
                       <div className="text-[10px] text-muted-foreground uppercase py-3 w-full text-center truncate px-2">
                         {hod?.name || 'No HOD Assigned'}
                       </div>
+                      <button
+                        onClick={(e) => { 
+                            e.stopPropagation(); 
+                            setEditBranchData({ id: branch.id, branchName: branch.branchName, assignedBlock: branch.assignedBlock || '' }); 
+                            setShowEditBranch(true); 
+                        }}
+                        className="absolute top-2 right-10 opacity-0 group-hover:opacity-100 p-2 text-blue-500 hover:bg-blue-50 rounded-full transition-all"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); setDeleteTarget({ type: 'branch', id: branch.id }); }}
                         className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-2 text-red-500 hover:bg-red-50 rounded-full transition-all"
@@ -423,6 +483,80 @@ export default function AdminBranches() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        {/* ──── EDIT DIALOGS ──── */}
+        <Dialog open={showEditBranch} onOpenChange={setShowEditBranch}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Edit Branch</DialogTitle></DialogHeader>
+            <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                    <Label>Branch Name</Label>
+                    <Input value={editBranchData.branchName} onChange={e => setEditBranchData({...editBranchData, branchName: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                    <Label>Assigned Block</Label>
+                    <Input value={editBranchData.assignedBlock} onChange={e => setEditBranchData({...editBranchData, assignedBlock: e.target.value})} />
+                </div>
+            </div>
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setShowEditBranch(false)}>Cancel</Button>
+                <Button onClick={handleEditBranch}>Save Changes</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showEditHod} onOpenChange={setShowEditHod}>
+          <DialogContent className="max-w-xl">
+            <DialogHeader><DialogTitle>Edit HOD Details</DialogTitle></DialogHeader>
+            <div className="grid grid-cols-2 gap-4 py-4">
+                <div className="space-y-2">
+                    <Label>Name</Label>
+                    <Input value={editHodData.name} onChange={e => setEditHodData({...editHodData, name: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                    <Label>HOD ID</Label>
+                    <Input value={editHodData.hodId} onChange={e => setEditHodData({...editHodData, hodId: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                    <Label>Email</Label>
+                    <Input value={editHodData.email} onChange={e => setEditHodData({...editHodData, email: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                    <Label>Phone Number</Label>
+                    <Input value={editHodData.phoneNumber} onChange={e => setEditHodData({...editHodData, phoneNumber: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                    <Label>Assigned Block</Label>
+                    <Input value={editHodData.assignedBlock} onChange={e => setEditHodData({...editHodData, assignedBlock: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                    <Label>Gender</Label>
+                    <Select value={editHodData.gender} onValueChange={(val) => setEditHodData({...editHodData, gender: val})}>
+                        <SelectTrigger><SelectValue placeholder="Gender" /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="Male">Male</SelectItem>
+                            <SelectItem value="Female">Female</SelectItem>
+                            <SelectItem value="Other">Other</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="space-y-2">
+                    <Label>Status</Label>
+                    <Select value={editHodData.status} onValueChange={(val) => setEditHodData({...editHodData, status: val})}>
+                        <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="Active">Active</SelectItem>
+                            <SelectItem value="Inactive">Inactive</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+            </div>
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setShowEditHod(false)}>Cancel</Button>
+                <Button onClick={handleEditHOD}>Save Changes</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
       </div>
     </AdminLayout>
   );
@@ -436,9 +570,10 @@ interface BranchDetailProps {
   onBack: () => void;
   onDeleteBranch: () => void;
   onDeleteHOD: (id: string) => void;
+  onEditHOD: (hod: HODDoc) => void;
 }
 
-function BranchDetailView({ branch, hod, stats, onBack, onDeleteBranch, onDeleteHOD }: BranchDetailProps) {
+function BranchDetailView({ branch, hod, stats, onBack, onDeleteBranch, onDeleteHOD, onEditHOD }: BranchDetailProps) {
   return (
     <div className="animate-fade-in space-y-6">
       <div className="flex items-center gap-4">
@@ -505,8 +640,11 @@ function BranchDetailView({ branch, hod, stats, onBack, onDeleteBranch, onDelete
                 <p className="text-xs text-primary uppercase">Assigned Block</p>
                 <p className="font-bold text-primary">{hod.assignedBlock}</p>
               </div>
-              <div className="sm:col-span-2 flex justify-end">
-                <Button variant="ghost" size="sm" className="text-destructive" onClick={() => onDeleteHOD(hod.id)}>
+              <div className="sm:col-span-2 flex justify-end gap-2">
+                <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={() => onEditHOD(hod!)}>
+                  <Edit className="w-4 h-4 mr-1" /> Edit HOD
+                </Button>
+                <Button variant="ghost" size="sm" className="text-destructive hover:bg-red-50" onClick={() => onDeleteHOD(hod.id)}>
                   <Trash2 className="w-4 h-4 mr-1" /> Remove HOD
                 </Button>
               </div>

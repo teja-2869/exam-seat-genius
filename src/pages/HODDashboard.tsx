@@ -32,7 +32,8 @@ export default function HODDashboard() {
     totalRooms: 0,
     totalClassrooms: 0,
     totalLabs: 0,
-    totalCapacity: 0
+    totalCapacity: 0,
+    studentsByYear: { '1st Year': 0, '2nd Year': 0, '3rd Year': 0, '4th Year': 0 }
   });
 
   const [activities, setActivities] = useState<any[]>([]);
@@ -46,6 +47,14 @@ export default function HODDashboard() {
         const sQ = query(collection(db, 'students'), where('institutionId', '==', institutionId), where('branch', '==', branch));
         const sSnap = await getDocs(sQ);
         const totalStudents = sSnap.size;
+        
+        let yearsCount = { '1st Year': 0, '2nd Year': 0, '3rd Year': 0, '4th Year': 0 };
+        sSnap.forEach(doc => {
+            const y = doc.data().year;
+            if (y && yearsCount[y as keyof typeof yearsCount] !== undefined) {
+                yearsCount[y as keyof typeof yearsCount]++;
+            }
+        });
 
         // Faculty Count (Assuming 'department' maps to 'branch')
         const fQ = query(collection(db, 'faculty'), where('institutionId', '==', institutionId), where('department', '==', branch));
@@ -89,7 +98,8 @@ export default function HODDashboard() {
             totalRooms: rSnap.size,
             totalClassrooms: classrooms,
             totalLabs: labs,
-            totalCapacity: capacity
+            totalCapacity: capacity,
+            studentsByYear: yearsCount
         });
 
         // Generate synthetic activity from rooms logic since "recent activity" doesn't have a distinct collection
@@ -228,6 +238,15 @@ export default function HODDashboard() {
                             <Label className="text-xs text-muted-foreground uppercase tracking-wider">Max Seating Capacity</Label>
                             <div className="text-2xl font-bold text-foreground mt-1 flex items-end gap-2">
                                 {stats.totalCapacity} <span className="text-sm font-normal text-muted-foreground mb-1">seats</span>
+                            </div>
+                        </div>
+                        <div className="p-4 bg-muted/50 rounded-xl">
+                            <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">Student Breakdown</Label>
+                            <div className="grid grid-cols-2 gap-2 text-sm text-foreground">
+                                <div className="bg-white p-2 text-center rounded shadow-sm">1st Yr: <strong>{stats.studentsByYear['1st Year']}</strong></div>
+                                <div className="bg-white p-2 text-center rounded shadow-sm">2nd Yr: <strong>{stats.studentsByYear['2nd Year']}</strong></div>
+                                <div className="bg-white p-2 text-center rounded shadow-sm">3rd Yr: <strong>{stats.studentsByYear['3rd Year']}</strong></div>
+                                <div className="bg-white p-2 text-center rounded shadow-sm">4th Yr: <strong>{stats.studentsByYear['4th Year']}</strong></div>
                             </div>
                         </div>
                     </CardContent>

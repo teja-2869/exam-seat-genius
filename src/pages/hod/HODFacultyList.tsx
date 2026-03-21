@@ -64,7 +64,9 @@ export default function HODFacultyList() {
                 where("branch", "==", branch)
             );
             const snap = await getDocs(q);
-            setFacultyList(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            const sorted = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            sorted.sort((a: any, b: any) => String(a.facultyId).localeCompare(String(b.facultyId), undefined, { numeric: true }));
+            setFacultyList(sorted);
         } catch (err) {
             console.error(err);
         } finally {
