@@ -34,9 +34,9 @@ export default function AdminSeatingPlans() {
         setLoadingExams(true);
         const q = query(collection(db, 'exams'), where('institutionId', '==', institutionId));
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
             // Client sort
-            fetched.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+            fetched.sort((a: any, b: any) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
             setExams(fetched);
             if (fetched.length > 0 && selectedExamId === 'All') {
                 setSelectedExamId(fetched[0].id);
