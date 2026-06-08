@@ -49,7 +49,7 @@ const Index = () => {
             </div>
             
             <h1 className="text-3xl sm:text-4xl md:text-6xl font-display font-bold text-foreground mb-4 sm:mb-6">
-              <span className="gradient-text">ExamSeat</span> Pro
+              <span className="gradient-text">ExamSeat Pro</span> — AI-Powered Examination Management
             </h1>
             
             <p className="text-base sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">

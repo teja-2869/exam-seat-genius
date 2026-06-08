@@ -39,7 +39,7 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
         {/* Left Side: Layout Toggle & Logo */}
         <div className="flex items-center gap-4">
           {toggleSidebar && (user?.role === 'admin' || user?.role === 'hod' || user?.role === 'faculty' || user?.role === 'student') && (
-            <Button variant="ghost" size="icon" className="lg:hidden" onClick={toggleSidebar}>
+            <Button variant="ghost" size="icon" className="lg:hidden" onClick={toggleSidebar} aria-label="Open navigation menu">
               <Menu className="w-5 h-5 text-foreground" />
             </Button>
           )}
@@ -53,9 +53,9 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
             </div>
             <div>
               <div className="flex items-center gap-3">
-                <h1 className="font-display font-bold text-lg text-foreground hidden sm:block">
+                <span className="font-display font-bold text-lg text-foreground hidden sm:block">
                   Exam Seat Genius
-                </h1>
+                </span>
                 {user?.role === 'hod' && user?.branchId && (
                   <Badge variant="secondary" className="hidden md:inline-flex bg-primary/10 text-primary border-primary/20">
                     {user.branchId} Department
@@ -96,7 +96,7 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar }) => {
           {isAuthenticated && user && (
             <>
               {['admin', 'hod', 'faculty', 'student'].includes(user.role) && (
-                <Button variant="ghost" size="icon" className="relative">
+                <Button variant="ghost" size="icon" className="relative" aria-label="View notifications">
                   <Bell className="w-5 h-5" />
                   <span className="absolute top-1 right-2 w-2 h-2 bg-destructive rounded-full" />
                 </Button>
