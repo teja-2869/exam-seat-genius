@@ -27,6 +27,7 @@ import AdminInstitutionSettings from "./pages/admin/AdminInstitutionSettings";
 import AdminAccountSettings from "./pages/admin/AdminAccountSettings";
 import AdminAuditLogs from "./pages/admin/AdminAuditLogs";
 import AdminBulkImport from "./pages/admin/AdminBulkImport";
+import AdminSubjects from "./pages/admin/AdminSubjects";
 
 // HOD Pages
 import HODDashboard from "./pages/HODDashboard";
