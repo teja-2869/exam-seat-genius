@@ -52,11 +52,23 @@ const AdminDashboard: React.FC = () => {
         const hodSnap = await getDocs(query(collection(db, 'hods'), where('institutionId', '==', institutionId)));
         const studentSnap = await getDocs(query(collection(db, 'students'), where('institutionId', '==', institutionId)));
         const examSnap = await getDocs(query(collection(db, 'exams'), where('collegeId', '==', institutionId)));
+        const subjectSnap = await getDocs(query(collection(db, 'subjects'), where('institutionId', '==', institutionId)));
+        let theoryC = 0, labC = 0, projC = 0, totalSubs = 0;
+        subjectSnap.docs.forEach(d => {
+          const data: any = d.data();
+          if (data.deleted) return;
+          totalSubs++;
+          const t = (data.examType || '').toLowerCase();
+          if (t === 'theory') theoryC++;
+          else if (t === 'lab' || t === 'practical') labC++;
+          else if (t === 'project') projC++;
+        });
 
         setStats({
           blocks: blocksSnap.size, floors: floorsCount, classrooms: classCount,
           labs: labCount, students: studentSnap.size, faculty: totalFaculty,
-          hods: hodSnap.size, branches: branchSnap.size, exams: examSnap.size, capacity: seatCapacity
+          hods: hodSnap.size, branches: branchSnap.size, exams: examSnap.size, capacity: seatCapacity,
+          subjects: totalSubs, theorySubjects: theoryC, labSubjects: labC, projectSubjects: projC
         });
 
         setRecentLogs([
