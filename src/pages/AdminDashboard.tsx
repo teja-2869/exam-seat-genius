@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import {
   Building2, Users, GraduationCap, Network, FileSpreadsheet,
-  Grid3X3, Server, Activity, AlertCircle
+  Grid3X3, Server, Activity, AlertCircle, BookOpen
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { db } from '@/lib/firebase';
