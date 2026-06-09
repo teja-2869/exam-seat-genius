@@ -6,6 +6,7 @@ import {
     Network,
     Users,
     GraduationCap,
+    BookOpen,
     PlusCircle,
     Calendar,
     ClipboardList,
