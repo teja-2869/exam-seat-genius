@@ -53,6 +53,12 @@ const navigation: NavSection[] = [
         ]
     },
     {
+        title: 'Academics',
+        items: [
+            { title: 'Subject Management', path: '/admin/subjects', icon: BookOpen },
+        ]
+    },
+    {
         title: 'Exams',
         items: [
             { title: 'Create Exam', path: '/admin/exams/create', icon: PlusCircle },
