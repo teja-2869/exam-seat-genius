@@ -6,6 +6,7 @@ import {
     Network,
     Users,
     GraduationCap,
+    BookOpen,
     PlusCircle,
     Calendar,
     ClipboardList,
@@ -49,6 +50,12 @@ const navigation: NavSection[] = [
             { title: 'Branch Management', path: '/admin/branches', icon: Network },
             { title: 'Faculty Management', path: '/admin/faculty', icon: GraduationCap },
             { title: 'Student Management', path: '/admin/students', icon: Users },
+        ]
+    },
+    {
+        title: 'Academics',
+        items: [
+            { title: 'Subject Management', path: '/admin/subjects', icon: BookOpen },
         ]
     },
     {

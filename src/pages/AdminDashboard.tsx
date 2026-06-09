@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import {
   Building2, Users, GraduationCap, Network, FileSpreadsheet,
-  Grid3X3, Server, Activity, AlertCircle
+  Grid3X3, Server, Activity, AlertCircle, BookOpen
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { db } from '@/lib/firebase';
@@ -19,7 +19,8 @@ const AdminDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     blocks: 0, floors: 0, classrooms: 0, labs: 0, students: 0,
-    faculty: 0, hods: 0, branches: 0, exams: 0, capacity: 0
+    faculty: 0, hods: 0, branches: 0, exams: 0, capacity: 0,
+    subjects: 0, theorySubjects: 0, labSubjects: 0, projectSubjects: 0
   });
   const [recentLogs, setRecentLogs] = useState<any[]>([]);
 
@@ -51,11 +52,23 @@ const AdminDashboard: React.FC = () => {
         const hodSnap = await getDocs(query(collection(db, 'hods'), where('institutionId', '==', institutionId)));
         const studentSnap = await getDocs(query(collection(db, 'students'), where('institutionId', '==', institutionId)));
         const examSnap = await getDocs(query(collection(db, 'exams'), where('collegeId', '==', institutionId)));
+        const subjectSnap = await getDocs(query(collection(db, 'subjects'), where('institutionId', '==', institutionId)));
+        let theoryC = 0, labC = 0, projC = 0, totalSubs = 0;
+        subjectSnap.docs.forEach(d => {
+          const data: any = d.data();
+          if (data.deleted) return;
+          totalSubs++;
+          const t = (data.examType || '').toLowerCase();
+          if (t === 'theory') theoryC++;
+          else if (t === 'lab' || t === 'practical') labC++;
+          else if (t === 'project') projC++;
+        });
 
         setStats({
           blocks: blocksSnap.size, floors: floorsCount, classrooms: classCount,
           labs: labCount, students: studentSnap.size, faculty: totalFaculty,
-          hods: hodSnap.size, branches: branchSnap.size, exams: examSnap.size, capacity: seatCapacity
+          hods: hodSnap.size, branches: branchSnap.size, exams: examSnap.size, capacity: seatCapacity,
+          subjects: totalSubs, theorySubjects: theoryC, labSubjects: labC, projectSubjects: projC
         });
 
         setRecentLogs([
@@ -93,6 +106,7 @@ const AdminDashboard: React.FC = () => {
               <Card className="dashboard-card shadow-sm"><CardContent className="p-4 flex flex-col justify-center"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1">Total HODs</span><div className="flex items-center gap-3"><Users className="w-5 h-5 text-gray-500" /><span className="text-2xl font-bold">{stats.hods}</span></div></CardContent></Card>
               <Card className="dashboard-card shadow-sm"><CardContent className="p-4 flex flex-col justify-center"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1">Branches</span><div className="flex items-center gap-3"><Network className="w-5 h-5 text-teal-500" /><span className="text-2xl font-bold">{stats.branches}</span></div></CardContent></Card>
               <Card className="dashboard-card shadow-sm"><CardContent className="p-4 flex flex-col justify-center"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1">Active Exams</span><div className="flex items-center gap-3"><FileSpreadsheet className="w-5 h-5 text-orange-500" /><span className="text-2xl font-bold">{stats.exams}</span></div></CardContent></Card>
+              <Card className="dashboard-card shadow-sm border-l-4 border-l-cyan-500"><CardContent className="p-4 flex flex-col justify-center"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1">Total Subjects</span><div className="flex items-center gap-3"><BookOpen className="w-5 h-5 text-cyan-500" /><span className="text-2xl font-bold">{stats.subjects}</span></div><div className="flex gap-3 mt-2 text-[10px] text-muted-foreground font-semibold"><span>Theory: {stats.theorySubjects}</span><span>Lab: {stats.labSubjects}</span><span>Project: {stats.projectSubjects}</span></div></CardContent></Card>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
