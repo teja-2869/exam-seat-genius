@@ -19,7 +19,8 @@ const AdminDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     blocks: 0, floors: 0, classrooms: 0, labs: 0, students: 0,
-    faculty: 0, hods: 0, branches: 0, exams: 0, capacity: 0
+    faculty: 0, hods: 0, branches: 0, exams: 0, capacity: 0,
+    subjects: 0, theorySubjects: 0, labSubjects: 0, projectSubjects: 0
   });
   const [recentLogs, setRecentLogs] = useState<any[]>([]);
 
