@@ -20,7 +20,8 @@ const AdminDashboard: React.FC = () => {
   const [stats, setStats] = useState({
     blocks: 0, floors: 0, classrooms: 0, labs: 0, students: 0,
     faculty: 0, hods: 0, branches: 0, exams: 0, capacity: 0,
-    subjects: 0, theorySubjects: 0, labSubjects: 0, projectSubjects: 0
+    subjects: 0, theorySubjects: 0, labSubjects: 0, projectSubjects: 0,
+    examSessions: 0, scheduledExams: 0, seatedExams: 0, seatingPlans: 0, studentsAllocated: 0, roomsUtilized: 0,
   });
   const [recentLogs, setRecentLogs] = useState<any[]>([]);
 
@@ -64,11 +65,29 @@ const AdminDashboard: React.FC = () => {
           else if (t === 'project') projC++;
         });
 
+        const sessSnap = await getDocs(query(collection(db, 'examSessions'), where('institutionId', '==', institutionId)));
+        let scheduledExams = 0, seatedExams = 0;
+        sessSnap.docs.forEach(d => {
+          const s = d.data() as any;
+          if (s.status === 'SCHEDULED' || s.status === 'SEATED' || s.status === 'PUBLISHED') scheduledExams++;
+          if (s.status === 'SEATED' || s.status === 'PUBLISHED') seatedExams++;
+        });
+        const planSnap = await getDocs(query(collection(db, 'seatingPlans'), where('institutionId', '==', institutionId)));
+        let studentsAllocated = 0;
+        const usedRooms = new Set<string>();
+        planSnap.docs.forEach(d => {
+          const p = d.data() as any;
+          studentsAllocated += p.occupiedSeats || 0;
+          if (p.roomNumber) usedRooms.add(String(p.roomNumber));
+        });
+
         setStats({
           blocks: blocksSnap.size, floors: floorsCount, classrooms: classCount,
           labs: labCount, students: studentSnap.size, faculty: totalFaculty,
           hods: hodSnap.size, branches: branchSnap.size, exams: examSnap.size, capacity: seatCapacity,
-          subjects: totalSubs, theorySubjects: theoryC, labSubjects: labC, projectSubjects: projC
+          subjects: totalSubs, theorySubjects: theoryC, labSubjects: labC, projectSubjects: projC,
+          examSessions: sessSnap.size, scheduledExams, seatedExams,
+          seatingPlans: planSnap.size, studentsAllocated, roomsUtilized: usedRooms.size,
         });
 
         setRecentLogs([
