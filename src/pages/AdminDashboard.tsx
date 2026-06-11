@@ -128,6 +128,19 @@ const AdminDashboard: React.FC = () => {
               <Card className="dashboard-card shadow-sm border-l-4 border-l-cyan-500"><CardContent className="p-4 flex flex-col justify-center"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1">Total Subjects</span><div className="flex items-center gap-3"><BookOpen className="w-5 h-5 text-cyan-500" /><span className="text-2xl font-bold">{stats.subjects}</span></div><div className="flex gap-3 mt-2 text-[10px] text-muted-foreground font-semibold"><span>Theory: {stats.theorySubjects}</span><span>Lab: {stats.labSubjects}</span><span>Project: {stats.projectSubjects}</span></div></CardContent></Card>
             </div>
 
+            <div>
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 mt-4">Examinations</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                <Card className="dashboard-card shadow-sm border-l-4 border-l-orange-500"><CardContent className="p-4"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1 block">Active Exams</span><div className="flex items-center gap-3"><FileSpreadsheet className="w-5 h-5 text-orange-500" /><span className="text-2xl font-bold">{stats.examSessions}</span></div></CardContent></Card>
+                <Card className="dashboard-card shadow-sm border-l-4 border-l-emerald-500"><CardContent className="p-4"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1 block">Scheduled Exams</span><div className="flex items-center gap-3"><Activity className="w-5 h-5 text-emerald-500" /><span className="text-2xl font-bold">{stats.scheduledExams}</span></div></CardContent></Card>
+                <Card className="dashboard-card shadow-sm border-l-4 border-l-blue-500"><CardContent className="p-4"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1 block">Seating Plans</span><div className="flex items-center gap-3"><Grid3X3 className="w-5 h-5 text-blue-500" /><span className="text-2xl font-bold">{stats.seatingPlans}</span></div></CardContent></Card>
+                <Card className="dashboard-card shadow-sm border-l-4 border-l-purple-500"><CardContent className="p-4"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1 block">Students Allocated</span><div className="flex items-center gap-3"><GraduationCap className="w-5 h-5 text-purple-500" /><span className="text-2xl font-bold">{stats.studentsAllocated}</span></div></CardContent></Card>
+                <Card className="dashboard-card shadow-sm border-l-4 border-l-amber-500"><CardContent className="p-4"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1 block">Rooms Utilized</span><div className="flex items-center gap-3"><Building2 className="w-5 h-5 text-amber-500" /><span className="text-2xl font-bold">{stats.roomsUtilized}</span></div></CardContent></Card>
+              </div>
+            </div>
+
+
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
               <Card className="dashboard-card h-full">
                 <CardHeader><CardTitle className="text-lg font-display text-foreground flex items-center gap-2"><Building2 className="w-5 h-5 text-primary" /> Institution Overview</CardTitle></CardHeader>
