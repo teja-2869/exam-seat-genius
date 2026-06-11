@@ -20,7 +20,8 @@ const AdminDashboard: React.FC = () => {
   const [stats, setStats] = useState({
     blocks: 0, floors: 0, classrooms: 0, labs: 0, students: 0,
     faculty: 0, hods: 0, branches: 0, exams: 0, capacity: 0,
-    subjects: 0, theorySubjects: 0, labSubjects: 0, projectSubjects: 0
+    subjects: 0, theorySubjects: 0, labSubjects: 0, projectSubjects: 0,
+    examSessions: 0, scheduledExams: 0, seatedExams: 0, seatingPlans: 0, studentsAllocated: 0, roomsUtilized: 0,
   });
   const [recentLogs, setRecentLogs] = useState<any[]>([]);
 
@@ -64,11 +65,29 @@ const AdminDashboard: React.FC = () => {
           else if (t === 'project') projC++;
         });
 
+        const sessSnap = await getDocs(query(collection(db, 'examSessions'), where('institutionId', '==', institutionId)));
+        let scheduledExams = 0, seatedExams = 0;
+        sessSnap.docs.forEach(d => {
+          const s = d.data() as any;
+          if (s.status === 'SCHEDULED' || s.status === 'SEATED' || s.status === 'PUBLISHED') scheduledExams++;
+          if (s.status === 'SEATED' || s.status === 'PUBLISHED') seatedExams++;
+        });
+        const planSnap = await getDocs(query(collection(db, 'seatingPlans'), where('institutionId', '==', institutionId)));
+        let studentsAllocated = 0;
+        const usedRooms = new Set<string>();
+        planSnap.docs.forEach(d => {
+          const p = d.data() as any;
+          studentsAllocated += p.occupiedSeats || 0;
+          if (p.roomNumber) usedRooms.add(String(p.roomNumber));
+        });
+
         setStats({
           blocks: blocksSnap.size, floors: floorsCount, classrooms: classCount,
           labs: labCount, students: studentSnap.size, faculty: totalFaculty,
           hods: hodSnap.size, branches: branchSnap.size, exams: examSnap.size, capacity: seatCapacity,
-          subjects: totalSubs, theorySubjects: theoryC, labSubjects: labC, projectSubjects: projC
+          subjects: totalSubs, theorySubjects: theoryC, labSubjects: labC, projectSubjects: projC,
+          examSessions: sessSnap.size, scheduledExams, seatedExams,
+          seatingPlans: planSnap.size, studentsAllocated, roomsUtilized: usedRooms.size,
         });
 
         setRecentLogs([
@@ -108,6 +127,19 @@ const AdminDashboard: React.FC = () => {
               <Card className="dashboard-card shadow-sm"><CardContent className="p-4 flex flex-col justify-center"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1">Active Exams</span><div className="flex items-center gap-3"><FileSpreadsheet className="w-5 h-5 text-orange-500" /><span className="text-2xl font-bold">{stats.exams}</span></div></CardContent></Card>
               <Card className="dashboard-card shadow-sm border-l-4 border-l-cyan-500"><CardContent className="p-4 flex flex-col justify-center"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1">Total Subjects</span><div className="flex items-center gap-3"><BookOpen className="w-5 h-5 text-cyan-500" /><span className="text-2xl font-bold">{stats.subjects}</span></div><div className="flex gap-3 mt-2 text-[10px] text-muted-foreground font-semibold"><span>Theory: {stats.theorySubjects}</span><span>Lab: {stats.labSubjects}</span><span>Project: {stats.projectSubjects}</span></div></CardContent></Card>
             </div>
+
+            <div>
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 mt-4">Examinations</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                <Card className="dashboard-card shadow-sm border-l-4 border-l-orange-500"><CardContent className="p-4"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1 block">Active Exams</span><div className="flex items-center gap-3"><FileSpreadsheet className="w-5 h-5 text-orange-500" /><span className="text-2xl font-bold">{stats.examSessions}</span></div></CardContent></Card>
+                <Card className="dashboard-card shadow-sm border-l-4 border-l-emerald-500"><CardContent className="p-4"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1 block">Scheduled Exams</span><div className="flex items-center gap-3"><Activity className="w-5 h-5 text-emerald-500" /><span className="text-2xl font-bold">{stats.scheduledExams}</span></div></CardContent></Card>
+                <Card className="dashboard-card shadow-sm border-l-4 border-l-blue-500"><CardContent className="p-4"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1 block">Seating Plans</span><div className="flex items-center gap-3"><Grid3X3 className="w-5 h-5 text-blue-500" /><span className="text-2xl font-bold">{stats.seatingPlans}</span></div></CardContent></Card>
+                <Card className="dashboard-card shadow-sm border-l-4 border-l-purple-500"><CardContent className="p-4"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1 block">Students Allocated</span><div className="flex items-center gap-3"><GraduationCap className="w-5 h-5 text-purple-500" /><span className="text-2xl font-bold">{stats.studentsAllocated}</span></div></CardContent></Card>
+                <Card className="dashboard-card shadow-sm border-l-4 border-l-amber-500"><CardContent className="p-4"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1 block">Rooms Utilized</span><div className="flex items-center gap-3"><Building2 className="w-5 h-5 text-amber-500" /><span className="text-2xl font-bold">{stats.roomsUtilized}</span></div></CardContent></Card>
+              </div>
+            </div>
+
+
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
               <Card className="dashboard-card h-full">
