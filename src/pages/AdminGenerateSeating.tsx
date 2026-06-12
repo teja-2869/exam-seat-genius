@@ -95,6 +95,8 @@ export default function AdminGenerateSeating() {
             || String(a.roomNumber || '').localeCompare(String(b.roomNumber || ''));
         });
 
+      console.log('[SeatingAI] Exam Selected:', { id: active.id, name: active.examName });
+      console.log('[SeatingAI] Rooms Selected:', rooms.length);
       if (rooms.length === 0) throw new Error('No usable classrooms or labs available.');
 
       // Fetch students
