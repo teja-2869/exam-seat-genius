@@ -18,6 +18,18 @@ import {
 import { toast } from '@/hooks/use-toast';
 import { isUsableExamRoom, isLabRoom, roomCapacity, normYear } from '@/lib/examUtils';
 
+// Recursively check for arrays directly containing arrays (Firestore rejects nested arrays).
+function hasNestedArray(value: any, insideArray = false): boolean {
+  if (Array.isArray(value)) {
+    if (insideArray) return true;
+    return value.some(v => hasNestedArray(v, true));
+  }
+  if (value && typeof value === 'object') {
+    return Object.values(value).some(v => hasNestedArray(v, false));
+  }
+  return false;
+}
+
 export default function AdminGenerateSeating() {
   const { user, college } = useAuth();
   const navigate = useNavigate();
@@ -95,6 +107,8 @@ export default function AdminGenerateSeating() {
             || String(a.roomNumber || '').localeCompare(String(b.roomNumber || ''));
         });
 
+      console.log('[SeatingAI] Exam Selected:', { id: active.id, name: active.examName });
+      console.log('[SeatingAI] Rooms Selected:', rooms.length);
       if (rooms.length === 0) throw new Error('No usable classrooms or labs available.');
 
       // Fetch students
@@ -126,11 +140,11 @@ export default function AdminGenerateSeating() {
       let processed = 0;
       let totalAllocations = 0;
 
+      let totalDocsSaved = 0;
       for (const sk of slotKeys) {
         const rowsInSlot = slotGroups[sk];
         setStatusMsg(`Allocating ${sk}...`);
 
-        // Gather all students for this slot
         const allSlotStudents: any[] = [];
         for (const row of rowsInSlot) {
           const matches = allStudents.filter(st =>
@@ -141,25 +155,27 @@ export default function AdminGenerateSeating() {
           );
           matches.forEach(m => allSlotStudents.push({ ...m, _subject: row }));
         }
+        console.log(`[SeatingAI] Slot ${sk} — Students Allocated:`, allSlotStudents.length);
 
         const interleaved = constraints.branchSeparation ? interleaveStudents(allSlotStudents) : allSlotStudents;
 
         let idx = 0;
         const batch = writeBatch(db);
+        let batchOps = 0;
         for (const room of rooms) {
           if (idx >= interleaved.length) break;
           const lab = isLabRoom(room.roomType);
-          const rows = parseInt(room.rowsOfBenches ?? room.rows, 10) || 5;
-          const cols = parseInt(room.columnsOfBenches ?? room.columns, 10) || 5;
-          const matrix: any[] = [];
+          const rowsCount = parseInt(room.rowsOfBenches ?? room.rows, 10) || 5;
+          const colsCount = parseInt(room.columnsOfBenches ?? room.columns, 10) || 5;
 
-          for (let r = 0; r < rows; r++) {
-            const rowArr: any[] = [];
-            for (let c = 0; c < cols; c++) {
+          // FLAT seats array — Firestore-safe (no nested arrays)
+          const seats: any[] = [];
+
+          for (let r = 0; r < rowsCount; r++) {
+            for (let c = 0; c < colsCount; c++) {
               const s1 = idx < interleaved.length ? interleaved[idx++] : null;
               let s2: any = null;
               if (!lab && constraints.seatsPerBench === 'two') {
-                // Pick next non-conflicting student
                 let pick = idx;
                 while (pick < interleaved.length) {
                   const cand = interleaved[pick];
@@ -170,48 +186,91 @@ export default function AdminGenerateSeating() {
                 }
                 if (!s2 && idx < interleaved.length) { s2 = interleaved[idx++]; }
               }
-              const toSeat = (s: any) => s ? {
-                studentId: s.id, rollNumber: String(s.rollNumber || ''), name: s.name,
-                branch: s.branch, year: normYear(s.year),
-                subjectCode: s._subject?.subjectCode, subjectName: s._subject?.subjectName,
-                scheduleId: s._subject?.id,
-              } : null;
-              rowArr.push({ row: r + 1, column: c + 1, seat1: toSeat(s1), seat2: toSeat(s2) });
+
+              const pushSeat = (s: any, pos: 'left' | 'right' | 'single') => {
+                if (!s) return;
+                seats.push({
+                  row: r + 1,
+                  column: c + 1,
+                  bench: c + 1,
+                  seatPosition: pos,
+                  studentId: s.id,
+                  rollNumber: String(s.rollNumber || ''),
+                  name: s.name || '',
+                  branch: s.branch || '',
+                  year: normYear(s.year),
+                  subjectCode: s._subject?.subjectCode || '',
+                  subjectName: s._subject?.subjectName || '',
+                  scheduleId: s._subject?.id || '',
+                });
+              };
+              if (lab) {
+                pushSeat(s1, 'single');
+              } else {
+                pushSeat(s1, 'left');
+                pushSeat(s2, 'right');
+              }
             }
-            matrix.push(rowArr);
           }
 
-          const occupied = matrix.flat().reduce((acc, b) => acc + (b.seat1 ? 1 : 0) + (b.seat2 ? 1 : 0), 0);
+          const occupied = seats.length;
           if (occupied === 0) continue;
           totalAllocations += occupied;
 
           const planRef = doc(collection(db, 'seatingPlans'));
-          batch.set(planRef, {
+          const planDoc: any = {
             institutionId,
             sessionId: selectedId,
             sessionName: active.examName,
+            examId: selectedId,
             examDate: rowsInSlot[0].date,
             examSlot: rowsInSlot[0].slot,
-            startTime: rowsInSlot[0].startTime,
-            endTime: rowsInSlot[0].endTime,
+            startTime: rowsInSlot[0].startTime || '',
+            endTime: rowsInSlot[0].endTime || '',
             scheduleIds: rowsInSlot.map(r => r.id),
             roomId: room.roomNumber || room.id,
-            roomNumber: room.roomNumber,
-            blockNumber: room.blockNumber,
-            floorNumber: room.floorNumber,
+            roomNumber: room.roomNumber || '',
+            blockNumber: room.blockNumber || '',
+            floorNumber: room.floorNumber ?? '',
             roomType: lab ? 'lab' : 'classroom',
-            rows, cols,
-            seatingMatrix: matrix,
+            rows: rowsCount,
+            cols: colsCount,
+            capacity: lab ? rowsCount * colsCount : rowsCount * colsCount * 2,
+            allocatedCount: occupied,
+            seats,
             occupiedSeats: occupied,
-            totalSeats: lab ? rows * cols : rows * cols * 2,
+            totalSeats: lab ? rowsCount * colsCount : rowsCount * colsCount * 2,
+            generatedAt: serverTimestamp(),
             createdAt: serverTimestamp(),
+            generatedBy: (user as any)?.uid || (user as any)?.id || 'admin',
             createdBy: (user as any)?.uid || (user as any)?.id || 'admin',
-          });
+          };
+
+          if (hasNestedArray(planDoc)) {
+            console.error('[SeatingAI] Nested array detected at', planRef.path);
+            throw new Error(`Nested array detected for room ${room.roomNumber}`);
+          }
+
+          try {
+            batch.set(planRef, planDoc);
+            batchOps++;
+          } catch (e: any) {
+            console.error('[SeatingAI] batch.set failed at', planRef.path, e);
+            throw e;
+          }
         }
-        await batch.commit();
+        try {
+          await batch.commit();
+          totalDocsSaved += batchOps;
+          console.log(`[SeatingAI] Documents Saved (slot ${sk}):`, batchOps);
+        } catch (e: any) {
+          console.error('[SeatingAI] batch.commit failed for slot', sk, e);
+          throw e;
+        }
         processed++;
         setProgress(Math.round((processed / slotKeys.length) * 100));
       }
+      console.log('[SeatingAI] Seats Generated:', totalAllocations, ' Documents Saved:', totalDocsSaved);
 
       await updateDoc(doc(db, 'examSessions', selectedId), { status: 'SEATED' });
 
