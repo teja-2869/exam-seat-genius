@@ -115,7 +115,7 @@ export default function AdminSeatingPlans() {
     // search across seats
     if (search.trim()) {
       const q = search.toLowerCase().trim();
-      const hit = (p.seatingMatrix || []).flat().some((b: any) => {
+      const hit = buildMatrix(p).flat().some((b: any) => {
         const s1 = b.seat1, s2 = b.seat2;
         const match = (s: any) => s && [s.rollNumber, s.name, s.branch].some(v => String(v || '').toLowerCase().includes(q));
         return match(s1) || match(s2) || String(p.roomNumber).toLowerCase().includes(q);
@@ -123,7 +123,7 @@ export default function AdminSeatingPlans() {
       if (!hit) return false;
     }
     if (fBranch !== 'All' || fYear !== 'All') {
-      const seats = (p.seatingMatrix || []).flat().flatMap((b: any) => [b.seat1, b.seat2]).filter(Boolean);
+      const seats = buildMatrix(p).flat().flatMap((b: any) => [b.seat1, b.seat2]).filter(Boolean);
       if (fBranch !== 'All' && !seats.some((s: any) => s.branch === fBranch)) return false;
       if (fYear !== 'All' && !seats.some((s: any) => s.year === fYear)) return false;
     }
@@ -141,7 +141,7 @@ export default function AdminSeatingPlans() {
     pdf.setFontSize(10); pdf.text(`Block ${plan.blockNumber} • Floor ${plan.floorNumber} • ${plan.examDate} ${plan.examSlot}`, 14, 22);
     pdf.text(`Session: ${plan.sessionName || activeSession?.examName}`, 14, 27);
     const rows: any[] = [];
-    (plan.seatingMatrix || []).forEach((row: any[]) => row.forEach((b: any) => {
+    buildMatrix(plan).forEach((row: any[]) => row.forEach((b: any) => {
       [b.seat1, b.seat2].filter(Boolean).forEach((s: any) => rows.push([
         `R${b.row}-C${b.column}`, s.rollNumber, s.name || '', s.branch || '', s.year || '', s.subjectCode || ''
       ]));
@@ -159,7 +159,7 @@ export default function AdminSeatingPlans() {
       pdf.setFontSize(11);
       pdf.text(`Room ${plan.roomNumber} • Floor ${plan.floorNumber} • ${plan.examDate} ${plan.examSlot}`, 14, y); y += 4;
       const rows: any[] = [];
-      (plan.seatingMatrix || []).forEach((row: any[]) => row.forEach((b: any) =>
+      buildMatrix(plan).forEach((row: any[]) => row.forEach((b: any) =>
         [b.seat1, b.seat2].filter(Boolean).forEach((s: any) => rows.push([
           `R${b.row}-C${b.column}`, s.rollNumber, s.branch || '', s.year || '', s.subjectCode || ''
         ]))));
@@ -175,7 +175,7 @@ export default function AdminSeatingPlans() {
     pdf.setFontSize(16); pdf.text('Student-wise Seating Report', 14, 16);
     pdf.setFontSize(10); pdf.text(`Session: ${activeSession?.examName}`, 14, 22);
     const rows: any[] = [];
-    filteredPlans.forEach(p => (p.seatingMatrix || []).forEach((row: any[]) => row.forEach((b: any) =>
+    filteredPlans.forEach(p => buildMatrix(p).forEach((row: any[]) => row.forEach((b: any) =>
       [b.seat1, b.seat2].filter(Boolean).forEach((s: any) => rows.push([
         s.rollNumber, s.name || '', s.branch || '', s.year || '',
         p.roomNumber, `R${b.row}-C${b.column}`, p.examDate, p.examSlot
@@ -327,9 +327,9 @@ export default function AdminSeatingPlans() {
           </DialogHeader>
           <div className="overflow-auto p-6 flex-1 bg-gray-50">
             {selectedRoom?.roomType === 'lab' ? (
-              <LabLayout matrix={selectedRoom?.seatingMatrix || []} />
+              <LabLayout matrix={selectedRoom ? buildMatrix(selectedRoom) : []} />
             ) : (
-              <ClassroomLayout matrix={selectedRoom?.seatingMatrix || []} />
+              <ClassroomLayout matrix={selectedRoom ? buildMatrix(selectedRoom) : []} />
             )}
             <div className="flex flex-wrap items-center justify-center gap-4 mt-6 p-3 bg-white border rounded-lg w-fit mx-auto">
               <Legend color="bg-gray-100 border-gray-300" label="Empty" />
