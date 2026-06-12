@@ -18,6 +18,18 @@ import {
 import { toast } from '@/hooks/use-toast';
 import { isUsableExamRoom, isLabRoom, roomCapacity, normYear } from '@/lib/examUtils';
 
+// Recursively check for arrays directly containing arrays (Firestore rejects nested arrays).
+function hasNestedArray(value: any, insideArray = false): boolean {
+  if (Array.isArray(value)) {
+    if (insideArray) return true;
+    return value.some(v => hasNestedArray(v, true));
+  }
+  if (value && typeof value === 'object') {
+    return Object.values(value).some(v => hasNestedArray(v, false));
+  }
+  return false;
+}
+
 export default function AdminGenerateSeating() {
   const { user, college } = useAuth();
   const navigate = useNavigate();
