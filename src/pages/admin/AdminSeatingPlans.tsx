@@ -18,6 +18,41 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { toast } from '@/hooks/use-toast';
 
+/**
+ * Build a row-major matrix of benches from the flat `seats` array stored in Firestore.
+ * Falls back to the legacy `seatingMatrix` field for older documents.
+ */
+function buildMatrix(plan: any): any[][] {
+  if (Array.isArray(plan?.seatingMatrix) && plan.seatingMatrix.length && Array.isArray(plan.seatingMatrix[0])) {
+    return plan.seatingMatrix;
+  }
+  const rows = plan?.rows || 0;
+  const cols = plan?.cols || 0;
+  const isLab = plan?.roomType === 'lab';
+  const matrix: any[][] = [];
+  for (let r = 0; r < rows; r++) {
+    const rowArr: any[] = [];
+    for (let c = 0; c < cols; c++) rowArr.push({ row: r + 1, column: c + 1, seat1: null, seat2: null });
+    matrix.push(rowArr);
+  }
+  (plan?.seats || []).forEach((s: any) => {
+    const r = (s.row || 1) - 1;
+    const c = (s.column || s.bench || 1) - 1;
+    if (!matrix[r] || !matrix[r][c]) return;
+    const seatData = {
+      studentId: s.studentId, rollNumber: s.rollNumber, name: s.name,
+      branch: s.branch, year: s.year,
+      subjectCode: s.subjectCode, subjectName: s.subjectName, scheduleId: s.scheduleId,
+    };
+    if (isLab || s.seatPosition === 'single' || s.seatPosition === 'left') {
+      matrix[r][c].seat1 = seatData;
+    } else {
+      matrix[r][c].seat2 = seatData;
+    }
+  });
+  return matrix;
+}
+
 export default function AdminSeatingPlans() {
   const { user, college } = useAuth();
   const institutionId = college?.id || (user as any)?.institutionId;
