@@ -316,6 +316,19 @@ export default function AdminSeatingPlans() {
                     <div className="text-sm"><span className="font-bold tabular-nums">{plan.occupiedSeats}</span><span className="text-muted-foreground"> / {plan.totalSeats}</span></div>
                     <Badge className="text-[10px] bg-yellow-100 text-yellow-800 hover:bg-yellow-100">{Math.round((plan.occupiedSeats / plan.totalSeats) * 100)}% filled</Badge>
                   </div>
+                  {(typeof plan.seatingQualityScore === 'number' || typeof plan.conflictCount === 'number') && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {typeof plan.seatingQualityScore === 'number' && (
+                        <Badge variant="outline" className="text-[10px]">Quality {plan.seatingQualityScore}/100</Badge>
+                      )}
+                      {typeof plan.conflictCount === 'number' && (
+                        <Badge className={`text-[10px] ${plan.conflictCount > 0 ? 'bg-red-100 text-red-700 hover:bg-red-100' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100'}`}>
+                          {plan.conflictCount} conflict{plan.conflictCount === 1 ? '' : 's'}
+                        </Badge>
+                      )}
+                      {plan.mode && <Badge variant="outline" className="text-[10px]">{plan.mode === 'ONE_PER_BENCH' ? '1/bench' : '2/bench'}</Badge>}
+                    </div>
+                  )}
                   <Button variant="ghost" size="sm" className="w-full mt-2 text-xs" onClick={(e) => { e.stopPropagation(); exportRoomWise(plan); }}>
                     <Download className="w-3 h-3 mr-1" /> Room PDF
                   </Button>
