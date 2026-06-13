@@ -140,12 +140,16 @@ export default function AdminGenerateSeating() {
       const slotKeys = Object.keys(slotGroups).sort();
       let processed = 0;
       let totalAllocations = 0;
-
       let totalDocsSaved = 0;
+      let totalConflicts = 0;
+      let totalQualitySum = 0;
+      let qualityRooms = 0;
+
       for (const sk of slotKeys) {
         const rowsInSlot = slotGroups[sk];
         setStatusMsg(`Allocating ${sk}...`);
 
+        // Build student pool tagged with subject metadata
         const allSlotStudents: any[] = [];
         for (const row of rowsInSlot) {
           const matches = allStudents.filter(st =>
@@ -158,65 +162,37 @@ export default function AdminGenerateSeating() {
         }
         console.log(`[SeatingAI] Slot ${sk} — Students Allocated:`, allSlotStudents.length);
 
-        const interleaved = constraints.branchSeparation ? interleaveStudents(allSlotStudents) : allSlotStudents;
+        // Slot-level seating mode: ONE_PER_BENCH if any HIGH-risk row exists; else from constraint
+        const slotHasHighRisk = rowsInSlot.some(r => r.seatingRisk === 'HIGH' || r.mode === 'ONE_PER_BENCH');
+        const slotMode: 'ONE_PER_BENCH' | 'TWO_PER_BENCH' =
+          slotHasHighRisk || constraints.seatsPerBench === 'one' ? 'ONE_PER_BENCH' : 'TWO_PER_BENCH';
+        const checkerboard = rowsInSlot.some(r =>
+          r.seatingRisk === 'HIGH' && (r.classification === 'COMMON' || r.classification === 'CORE')
+        );
 
-        let idx = 0;
+        const pool = [...allSlotStudents]; // optimizer mutates
         const batch = writeBatch(db);
         let batchOps = 0;
+
         for (const room of rooms) {
-          if (idx >= interleaved.length) break;
+          if (pool.length === 0) break;
           const lab = isLabRoom(room.roomType);
+          const mode: 'ONE_PER_BENCH' | 'TWO_PER_BENCH' = lab ? 'ONE_PER_BENCH' : slotMode;
           const rowsCount = parseInt(room.rowsOfBenches ?? room.rows, 10) || 5;
           const colsCount = parseInt(room.columnsOfBenches ?? room.columns, 10) || 5;
 
-          // FLAT seats array — Firestore-safe (no nested arrays)
-          const seats: any[] = [];
-
-          for (let r = 0; r < rowsCount; r++) {
-            for (let c = 0; c < colsCount; c++) {
-              const s1 = idx < interleaved.length ? interleaved[idx++] : null;
-              let s2: any = null;
-              if (!lab && constraints.seatsPerBench === 'two') {
-                let pick = idx;
-                while (pick < interleaved.length) {
-                  const cand = interleaved[pick];
-                  const sameBranch = constraints.branchSeparation && cand.branch === s1?.branch;
-                  const consecRoll = Math.abs(parseInt(cand.rollNumber) - parseInt(s1?.rollNumber || '0')) === 1;
-                  if (!sameBranch && !consecRoll) { s2 = cand; interleaved.splice(pick, 1); break; }
-                  pick++;
-                }
-                if (!s2 && idx < interleaved.length) { s2 = interleaved[idx++]; }
-              }
-
-              const pushSeat = (s: any, pos: 'left' | 'right' | 'single') => {
-                if (!s) return;
-                seats.push({
-                  row: r + 1,
-                  column: c + 1,
-                  bench: c + 1,
-                  seatPosition: pos,
-                  studentId: s.id,
-                  rollNumber: String(s.rollNumber || ''),
-                  name: s.name || '',
-                  branch: s.branch || '',
-                  year: normYear(s.year),
-                  subjectCode: s._subject?.subjectCode || '',
-                  subjectName: s._subject?.subjectName || '',
-                  scheduleId: s._subject?.id || '',
-                });
-              };
-              if (lab) {
-                pushSeat(s1, 'single');
-              } else {
-                pushSeat(s1, 'left');
-                pushSeat(s2, 'right');
-              }
-            }
-          }
+          const seats = allocateRoomSeats(room, pool, { mode, checkerboard: checkerboard && !lab });
+          if (seats.length === 0) continue;
 
           const occupied = seats.length;
-          if (occupied === 0) continue;
           totalAllocations += occupied;
+
+          const conflicts = detectConflicts(seats);
+          totalConflicts += conflicts.length;
+          const totalSeatsForRoom = lab ? rowsCount * colsCount : (mode === 'ONE_PER_BENCH' ? rowsCount * colsCount : rowsCount * colsCount * 2);
+          const quality = scoreSeating(seats, totalSeatsForRoom);
+          totalQualitySum += quality;
+          qualityRooms++;
 
           const planRef = doc(collection(db, 'seatingPlans'));
           const planDoc: any = {
@@ -236,11 +212,17 @@ export default function AdminGenerateSeating() {
             roomType: lab ? 'lab' : 'classroom',
             rows: rowsCount,
             cols: colsCount,
-            capacity: lab ? rowsCount * colsCount : rowsCount * colsCount * 2,
+            capacity: totalSeatsForRoom,
             allocatedCount: occupied,
             seats,
             occupiedSeats: occupied,
-            totalSeats: lab ? rowsCount * colsCount : rowsCount * colsCount * 2,
+            totalSeats: totalSeatsForRoom,
+            mode,
+            checkerboard: checkerboard && !lab,
+            seatingQualityScore: quality,
+            conflictCount: conflicts.length,
+            conflicts,
+            utilizationPct: totalSeatsForRoom > 0 ? Math.round((occupied / totalSeatsForRoom) * 100) : 0,
             generatedAt: serverTimestamp(),
             createdAt: serverTimestamp(),
             generatedBy: (user as any)?.uid || (user as any)?.id || 'admin',
@@ -271,12 +253,17 @@ export default function AdminGenerateSeating() {
         processed++;
         setProgress(Math.round((processed / slotKeys.length) * 100));
       }
-      console.log('[SeatingAI] Seats Generated:', totalAllocations, ' Documents Saved:', totalDocsSaved);
+      const avgQuality = qualityRooms > 0 ? Math.round(totalQualitySum / qualityRooms) : 0;
+      console.log('[SeatingAI] Seats Generated:', totalAllocations, ' Documents Saved:', totalDocsSaved, ' Conflicts:', totalConflicts, ' Avg Quality:', avgQuality);
 
-      await updateDoc(doc(db, 'examSessions', selectedId), { status: 'SEATED' });
+      await updateDoc(doc(db, 'examSessions', selectedId), {
+        status: 'SEATED',
+        seatingQualityScore: avgQuality,
+        totalConflicts,
+      });
 
-      setStatusMsg(`Allocated ${totalAllocations} seats across ${slotKeys.length} session(s).`);
-      toast({ title: 'Seating generated', description: `${totalAllocations} seats allocated.` });
+      setStatusMsg(`Allocated ${totalAllocations} seats • Quality ${avgQuality}/100 • Conflicts ${totalConflicts}.`);
+      toast({ title: 'Seating generated', description: `${totalAllocations} seats • Quality ${avgQuality}/100 • ${totalConflicts} conflicts.` });
       setTimeout(() => navigate('/admin/exams/seating-plans'), 1200);
     } catch (err: any) {
       console.error(err);
