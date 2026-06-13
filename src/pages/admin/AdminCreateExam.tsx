@@ -372,6 +372,16 @@ export default function AdminCreateExam() {
                 <MetricRow icon={<Layers className="w-4 h-4" />} label="Total Branches" value={metrics.totalBranches} />
                 <MetricRow icon={<Calendar className="w-4 h-4" />} label="Estimated Exam Days" value={metrics.estimatedDays} />
 
+                <div className="pt-3 border-t">
+                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">AI Subject Classification</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <Badge variant="outline" className="text-[10px]">Common: {aiPreview.common}</Badge>
+                    <Badge variant="outline" className="text-[10px]">Core: {aiPreview.core}</Badge>
+                    <Badge variant="outline" className="text-[10px]">Branch: {aiPreview.branchSpec}</Badge>
+                    <Badge variant="outline" className="text-[10px]">Lab: {aiPreview.lab}</Badge>
+                  </div>
+                </div>
+
                 <div className="pt-4 border-t space-y-2">
                   <div className="flex flex-wrap gap-1">
                     {form.years.map(y => <Badge key={y} variant="secondary" className="text-[10px]">{y}</Badge>)}
