@@ -96,6 +96,19 @@ export default function AdminCreateExam() {
     };
   }, [students, form]);
 
+  // AI classification preview
+  const aiPreview = useMemo(() => {
+    const selected = subjects.filter(s => form.selectedSubjectIds.includes(s.id));
+    if (selected.length === 0) return { common: 0, core: 0, branchSpec: 0, lab: 0 };
+    const c = classifySubjects(selected, subjects);
+    return {
+      common: c.filter(x => x.classification === 'COMMON').length,
+      core: c.filter(x => x.classification === 'CORE').length,
+      branchSpec: c.filter(x => x.classification === 'BRANCH').length,
+      lab: c.filter(x => x.classification === 'LAB').length,
+    };
+  }, [subjects, form.selectedSubjectIds]);
+
   const toggleArr = (key: 'years' | 'branches' | 'selectedSubjectIds', v: string) => {
     const arr = form[key] as string[];
     setForm({ ...form, [key]: arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v] });
