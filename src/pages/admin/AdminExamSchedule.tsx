@@ -295,6 +295,9 @@ export default function AdminExamSchedule() {
                         <Badge variant="secondary" className="text-[10px]">{s.subjects?.length || 0} subjects</Badge>
                         <Badge variant="outline" className="text-[10px]">{s.totalStudents || 0} students</Badge>
                         <Badge className={`text-[10px] ${s.status === 'SCHEDULED' ? 'bg-emerald-100 text-emerald-700' : s.status === 'SEATED' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>{s.status}</Badge>
+                        {typeof s.optimizationScore === 'number' && (
+                          <Badge variant="outline" className="text-[10px]">Score {s.optimizationScore}/100</Badge>
+                        )}
                       </div>
                     </div>
                     <Trash2 className="w-4 h-4 text-muted-foreground hover:text-red-500 cursor-pointer flex-shrink-0" onClick={(e) => { e.stopPropagation(); handleDeleteSession(s.id); }} />
