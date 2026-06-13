@@ -13,7 +13,8 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { Calendar, Sparkles, Activity, Trash2, ArrowRight, BookOpen, CheckCircle2, Clock, Layers } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-import { SLOT_TIMES, normYear, addDays, todayPlus, isSunday } from '@/lib/examUtils';
+import { SLOT_TIMES, normYear, addDays, todayPlus, isSunday, isUsableExamRoom } from '@/lib/examUtils';
+import { computeSeatingRisk, pickBenchMode, scoreSchedule, totalRoomCapacity } from '@/lib/examOptimizer';
 
 export default function AdminExamSchedule() {
   const { user, college } = useAuth();
