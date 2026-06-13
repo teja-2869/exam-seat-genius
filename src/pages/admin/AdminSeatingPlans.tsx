@@ -269,12 +269,23 @@ export default function AdminSeatingPlans() {
         </Card>
 
         {/* KPI Summary */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <KpiCard label="Rooms Utilized" value={filteredPlans.length} icon={<Building2 className="w-5 h-5 text-primary" />} />
-          <KpiCard label="Total Seats" value={totalSeats} icon={<LayoutGrid className="w-5 h-5 text-blue-600" />} />
-          <KpiCard label="Students Allocated" value={totalOccupied} icon={<Users className="w-5 h-5 text-emerald-600" />} />
-          <KpiCard label="Avg Occupancy" value={totalSeats ? `${Math.round(totalOccupied / totalSeats * 100)}%` : '0%'} icon={<Activity className="w-5 h-5 text-amber-600" />} />
-        </div>
+        {(() => {
+          const totalConflicts = filteredPlans.reduce((a, p) => a + (p.conflictCount || 0), 0);
+          const avgQuality = filteredPlans.length
+            ? Math.round(filteredPlans.reduce((a, p) => a + (p.seatingQualityScore || 0), 0) / filteredPlans.length)
+            : 0;
+          const avgUtil = totalSeats ? Math.round((totalOccupied / totalSeats) * 100) : 0;
+          return (
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+              <KpiCard label="Rooms Utilized" value={filteredPlans.length} icon={<Building2 className="w-5 h-5 text-primary" />} />
+              <KpiCard label="Total Seats" value={totalSeats} icon={<LayoutGrid className="w-5 h-5 text-blue-600" />} />
+              <KpiCard label="Students Allocated" value={totalOccupied} icon={<Users className="w-5 h-5 text-emerald-600" />} />
+              <KpiCard label="Avg Occupancy" value={`${avgUtil}%`} icon={<Activity className="w-5 h-5 text-amber-600" />} />
+              <KpiCard label="Quality Score" value={`${avgQuality}/100`} icon={<Activity className="w-5 h-5 text-emerald-600" />} />
+              <KpiCard label="Conflicts" value={totalConflicts} icon={<Activity className={`w-5 h-5 ${totalConflicts > 0 ? 'text-red-600' : 'text-emerald-600'}`} />} />
+            </div>
+          );
+        })()}
 
         {/* Content */}
         {loading ? (
