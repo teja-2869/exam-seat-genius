@@ -1,88 +1,86 @@
-# Exams Module — Full Implementation Plan
+# AI Exam Optimization Engine — Implementation Plan
 
-This rebuilds the four Admin → Exams pages so data flows cleanly: **Create Exam → Schedule → Generate Seating → Seating Plans**. Existing UI palette, AdminLayout, and design language are preserved.
+Refactors the four existing Exam pages (**Create Exam**, **Exam Schedule**, **Generate Seating AI**, **Seating Plans**) into a coordinated optimization pipeline. **No UI/theme/layout changes** — only backend logic, new helper modules, and small additive UI badges (score chips, conflict counts) inside existing cards.
 
-## 1. Data model (Firestore)
+---
 
-New collection structure (all docs carry `institutionId`, `createdBy`, `createdAt`):
+## 1. New shared engine module
 
-- `examSessions/{id}` — the "exam dataset" created on page 1:
-  - `examName`, `examType`, `academicYear`, `semester`, `regulation`
-  - `branches: string[]`, `years: string[]`, `examCategory` (Regular | Supplementary | Both)
-  - `subjectIds: string[]` (refs into existing `subjects` collection)
-  - `rules: { minGapDays, maxPerDay, includeSunday, includeHolidays, allowParallel }`
-  - `status`: `DRAFT` → `SCHEDULED` → `SEATED` → `PUBLISHED`
-  - Cached metrics: `totalStudents`, `totalSubjects`, `totalDaysEstimated`
+Create `src/lib/examOptimizer.ts` exposing pure functions used by all four pages:
 
-- `examSchedule/{id}` — one row per subject session:
-  - `sessionId` (parent examSessions id), `subjectId`, `subjectCode`, `subjectName`
-  - `date`, `slot` (Morning | Afternoon | Evening), `startTime`, `endTime`
-  - `branches`, `year`, `studentCount`, `status`
+- `classifySubjects(subjects, allSubjectsAcrossBranches)` → tags each subject as `COMMON | CORE | BRANCH | LAB | SUPPLEMENTARY` using:
+  - same `subjectCode` or normalized `subjectName` appearing across ≥3 branches → `COMMON`
+  - `roomTypeHint === 'lab'` or name contains `lab/practical` → `LAB`
+  - `examType === 'Supplementary'` → `SUPPLEMENTARY`
+  - shared across 2 branches in same year → `CORE`
+  - else → `BRANCH`
+- `buildBranchSimilarityMatrix(subjects)` → `{ [branchA]: { [branchB]: { sharedSubjects, sharedCodes[], riskScore } } }`. Risk = sharedSubjects / min(totalA,totalB).
+- `computeSeatingRisk(subject, studentCount, totalCapacity)` → `LOW | MEDIUM | HIGH`. HIGH when same-subject students > 40% of capacity or subject is COMMON with >150 students.
+- `scoreSchedule(scheduleRows, similarityMatrix)` → 0–100 based on: cohort gap respect, common-subject distribution across days, parallel-branch-same-subject penalty.
+- `scoreSeating(seats, rows, cols, isLab)` → 0–100. Deductions for any same-subject adjacency (L/R/front/back/diagonal), capacity overflows, low branch diversity.
+- `detectConflicts(seats)` → array of `{type, row, col, rollA, rollB, subject}` for the 4 adjacency types + duplicates + overflow.
 
-- `seatingPlans/{id}` — already exists; extend with `sessionId`, `scheduleId`, `roomType`, room layout snapshot.
+## 2. Create Exam (`AdminCreateExam.tsx`)
 
-## 2. Page 1 — Create Exam (`AdminCreateExam.tsx`)
+On submit, additionally:
+- Run `classifySubjects` over the chosen subjects (using all branch subjects fetched for context) and persist `subjectClassifications[]` on the `examSessions` doc.
+- Run `buildBranchSimilarityMatrix` and store as `branchSimilarity` map.
+- Store `commonSubjectCodes[]` for downstream use.
+- AI Preparation Summary sidebar gains read-only chips: *Common subjects: N*, *High-risk: N* (no layout change, just extra Badges in existing card).
 
-Sectioned form per spec:
-1. **Exam Information** — name, type (Internal / Mid / Semester / Supplementary / Practical / Lab), academic year, semester, regulation, multi-select years, multi-select branches (loaded from `branches`), exam category.
-2. **Subject Selection** — auto-fetch from `subjects` filtered by branches/years/semester/regulation. Table with Select All / individual checkboxes (code, name, credits, year, semester, branch).
-3. **Examination Rules** — minGapDays, maxPerDay, includeSunday switch, includeHolidays switch, allowParallel switch.
-4. **AI Preparation Summary** — live computed Total Students / Subjects / Branches / Estimated Days.
-5. **Create Exam** button → writes `examSessions` doc with `status: DRAFT`, then navigates to Schedule page.
+## 3. Exam Schedule (`AdminExamSchedule.tsx`)
 
-## 3. Page 2 — Exam Schedule (`AdminExamSchedule.tsx`)
+Rewrite `handleGenerate` into an optimizer:
+1. Pull `subjectClassifications`, `branchSimilarity`, room capacity total (sum of `roomCapacity` for usable rooms).
+2. Compute per-subject `seatingRisk`.
+3. Sort subjects: HIGH-risk common first (spread thin), then CORE, then BRANCH.
+4. Slot assignment honors existing minGap/maxPerDay + new constraints:
+   - Two cohorts whose `branchSimilarity.riskScore > 0.5` cannot be in the same slot writing the *same* subject code unless `allowParallel`.
+   - HIGH-risk common subjects: only one per day across the institution.
+   - Same date+slot may host **different** subjects from similar branches (encouraged).
+5. After scheduling, call `scoreSchedule` and persist `optimizationScore` on `examSessions` + each `examSchedule` row gets `seatingRisk` + `mode` (`ONE_PER_BENCH` if HIGH risk lab/common, else `TWO_PER_BENCH`).
+6. Add a Badge in the existing session card header: `Score: 87/100` (uses existing Badge component, no new layout).
 
-- Cards: Total Exams, Scheduled Subjects, Pending Subjects, Exam Days.
-- Left: list of `examSessions`. Selecting one shows its detail.
-- **Generate Schedule** button → deterministic local generator (no Cloud Function needed; runs in browser to avoid extra infra). Algorithm:
-  - Sort subjects by year+branch grouping.
-  - Walk dates forward starting tomorrow, skipping Sunday (if disabled) and holidays.
-  - Assign each subject to Morning/Afternoon slot respecting `maxPerDay` and `minGapDays` per branch-year cohort.
-  - Avoid scheduling two subjects on the same day for the same (branch, year) unless `allowParallel`.
-  - Writes batch to `examSchedule`, updates session `status: SCHEDULED`.
-- Table columns per spec: Date, Session, Code, Name, Year, Branch, Students, Status.
+## 4. Generate Seating AI (`AdminGenerateSeating.tsx`)
 
-## 4. Page 3 — Generate Seating AI (`AdminGenerateSeating.tsx`)
+Refactor allocator:
+- Read `mode` from each `examSchedule` row.
+- For each room: choose layout
+  - Lab → always one student per workstation.
+  - Classroom + any HIGH-risk subject for that slot → checkerboard (`seatPosition: 'single'`, alternating cells).
+  - Classroom + only different subjects on bench → two-per-bench.
+- Allocator pass 1: bucket students by subject; round-robin interleave across buckets to maximize subject diversity per row.
+- Allocator pass 2 (validator): walk seats, if any same-subject neighbor (L/R/front/back/diagonal) exists, swap with the nearest different-subject candidate in a later row. Max 3 passes.
+- Run `detectConflicts` + `scoreSeating`; persist on each `seatingPlans` doc: `seatingQualityScore`, `conflictCount`, `conflicts[]` (flat objects only — no nested arrays), `mode`, `utilizationPct`.
+- Keep existing flat `seats[]` schema (Firestore safe). Validate with existing `hasNestedArray` guard.
 
-- Select a scheduled exam session.
-- Constraints UI: one/two per bench, branch separation, year separation, supp separation.
-- Room source: fetch `classrooms` for institution, **ignore** rooms whose `roomType` is HOD/Faculty/Wash; **use** classroom + lab.
-- For each `examSchedule` row of the session:
-  - Fetch matching students from `students` collection.
-  - Allocation algorithm (deterministic, runs client-side using Gemini only as optional optimizer if `VITE_GEMINI_API_KEY` is present; otherwise local logic):
-    - Sort students by roll, then shuffle with branch-interleave so neighbours differ in branch.
-    - Walk rooms (classrooms first, then labs). Classroom = 2 seats/bench, Lab = 1 student/system.
-    - Skip pairing students of the same branch / consecutive rolls on the same bench.
-  - Write `seatingPlans` doc per (schedule, room).
-- Progress indicator + status messages. Updates session `status: SEATED`.
+## 5. Seating Plans (`AdminSeatingPlans.tsx`)
 
-## 5. Page 4 — Seating Plans (`AdminSeatingPlans.tsx`)
+Inside the existing filter/cards UI, additively show in each plan card and at the top KPI strip:
+- `Quality: 92/100` Badge
+- `Conflicts: 0` Badge (red if >0)
+- `Utilization: 88%` Badge
+- Master KPI row reuses existing KpiCard component — no new layout.
 
-- Filters: Exam Session, Date, Block, Floor, Room, Branch, Year.
-- Cards grid per room; clicking opens visual layout modal:
-  - **Classroom**: existing bench grid (gray empty / yellow occupied, shows roll + branch).
-  - **Lab**: render workstations as dark-gray rectangles, one student per system.
-- Search: roll / room / name / branch.
-- Exports (jsPDF + autoTable, already common pattern):
-  - Room-wise PDF, Block-wise PDF, Student-wise PDF, Invigilator Sheet, Master Report.
-- Dashboard counts (Active Exams, Scheduled, Generated Plans, Students Allocated, Rooms Utilized) updated in `AdminDashboard.tsx`.
+PDF exports already exist; add `Conflict Report` and `Optimization Summary` as extra autoTable sections inside the existing Master Report PDF.
 
-## 6. Firestore rules
+## 6. Firestore additions (no new collections)
 
-Add rules for `examSessions` and `examSchedule` mirroring existing `exams`/`seatingPlans` (institution-scoped, ADMIN write, HOD/Faculty/Student read).
+Extra fields on existing docs only — no rule/grant changes needed (collections already covered):
+- `examSessions`: `subjectClassifications`, `branchSimilarity`, `commonSubjectCodes`, `optimizationScore`.
+- `examSchedule`: `seatingRisk`, `mode`.
+- `seatingPlans`: `seatingQualityScore`, `conflictCount`, `conflicts`, `mode`, `utilizationPct`.
 
-## 7. Out of scope (kept as follow-up)
-- Editing existing schedule rows manually (drag-drop) — generated only.
-- Holidays collection UI — `includeHolidays` toggle is honored only if a `holidays` collection exists.
-- Cloud-side AI call — kept optional; deterministic local engine is the default so users without billing still see results.
+## 7. Out of scope
+
+- No Gemini/Cloud Function call — the optimizer runs deterministically client-side (matches the existing pattern). The Cloud Function `generateSeatingPlan.ts` remains untouched.
+- No UI redesign, no new pages, no navigation/sidebar changes.
+- No manual schedule editor.
+- Holidays UI unchanged.
 
 ## 8. Files touched
-- `src/pages/admin/AdminCreateExam.tsx` (rewrite)
-- `src/pages/admin/AdminExamSchedule.tsx` (rewrite)
-- `src/pages/AdminGenerateSeating.tsx` (rewrite)
-- `src/pages/admin/AdminSeatingPlans.tsx` (extend: filters, lab rendering, PDF exports, search)
-- `src/pages/AdminDashboard.tsx` (add seating/session KPIs)
-- `firestore.rules` (new collections)
-- `package.json` (add `jspdf`, `jspdf-autotable` if missing)
 
-Approve and I'll build it.
+- **Create**: `src/lib/examOptimizer.ts`
+- **Edit**: `src/pages/admin/AdminCreateExam.tsx`, `src/pages/admin/AdminExamSchedule.tsx`, `src/pages/AdminGenerateSeating.tsx`, `src/pages/admin/AdminSeatingPlans.tsx`
+
+Approve to implement.
