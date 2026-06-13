@@ -15,6 +15,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
 import { Sparkles, Activity, BookOpen, Users, Layers, Calendar } from 'lucide-react';
 import { YEAR_LABELS, normYear, SLOT_TIMES } from '@/lib/examUtils';
+import { classifySubjects, buildBranchSimilarityMatrix } from '@/lib/examOptimizer';
 
 const EXAM_TYPES = [
   'Internal Assessment', 'Mid Examination', 'Semester Examination',
@@ -95,6 +96,19 @@ export default function AdminCreateExam() {
     };
   }, [students, form]);
 
+  // AI classification preview
+  const aiPreview = useMemo(() => {
+    const selected = subjects.filter(s => form.selectedSubjectIds.includes(s.id));
+    if (selected.length === 0) return { common: 0, core: 0, branchSpec: 0, lab: 0 };
+    const c = classifySubjects(selected, subjects);
+    return {
+      common: c.filter(x => x.classification === 'COMMON').length,
+      core: c.filter(x => x.classification === 'CORE').length,
+      branchSpec: c.filter(x => x.classification === 'BRANCH').length,
+      lab: c.filter(x => x.classification === 'LAB').length,
+    };
+  }, [subjects, form.selectedSubjectIds]);
+
   const toggleArr = (key: 'years' | 'branches' | 'selectedSubjectIds', v: string) => {
     const arr = form[key] as string[];
     setForm({ ...form, [key]: arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v] });
@@ -124,6 +138,11 @@ export default function AdminCreateExam() {
           credits: s.credits || 0,
         }));
 
+      // AI: classify subjects and build branch similarity from full institution subject pool
+      const classifications = classifySubjects(selectedSubjectsData, subjects);
+      const branchSimilarity = buildBranchSimilarityMatrix(subjects.filter(s => form.branches.includes(s.branch)));
+      const commonSubjectCodes = Array.from(new Set(classifications.filter(c => c.classification === 'COMMON').map(c => c.subjectCode)));
+
       await addDoc(collection(db, 'examSessions'), {
         institutionId,
         examName: form.examName.trim(),
@@ -136,6 +155,9 @@ export default function AdminCreateExam() {
         examCategory: form.examCategory,
         subjectIds: form.selectedSubjectIds,
         subjects: selectedSubjectsData,
+        subjectClassifications: classifications,
+        branchSimilarity,
+        commonSubjectCodes,
         rules: form.rules,
         totalStudents: metrics.totalStudents,
         totalSubjects: metrics.totalSubjects,
@@ -349,6 +371,16 @@ export default function AdminCreateExam() {
                 <MetricRow icon={<BookOpen className="w-4 h-4" />} label="Total Subjects" value={metrics.totalSubjects} />
                 <MetricRow icon={<Layers className="w-4 h-4" />} label="Total Branches" value={metrics.totalBranches} />
                 <MetricRow icon={<Calendar className="w-4 h-4" />} label="Estimated Exam Days" value={metrics.estimatedDays} />
+
+                <div className="pt-3 border-t">
+                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">AI Subject Classification</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <Badge variant="outline" className="text-[10px]">Common: {aiPreview.common}</Badge>
+                    <Badge variant="outline" className="text-[10px]">Core: {aiPreview.core}</Badge>
+                    <Badge variant="outline" className="text-[10px]">Branch: {aiPreview.branchSpec}</Badge>
+                    <Badge variant="outline" className="text-[10px]">Lab: {aiPreview.lab}</Badge>
+                  </div>
+                </div>
 
                 <div className="pt-4 border-t space-y-2">
                   <div className="flex flex-wrap gap-1">
