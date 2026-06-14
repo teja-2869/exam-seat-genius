@@ -3,6 +3,7 @@
 // Pure functions — no Firestore calls inside.
 
 import { normYear, isLabRoom, roomCapacity } from './examUtils';
+import { getOfferings } from './subjectUtils';
 
 export type SubjectClass = 'COMMON' | 'CORE' | 'BRANCH' | 'LAB' | 'SUPPLEMENTARY';
 export type SeatingRisk = 'LOW' | 'MEDIUM' | 'HIGH';
@@ -27,12 +28,18 @@ const normName = (n: any) => String(n || '').trim().toLowerCase().replace(/\s+/g
  * `pool` should include subjects across all branches for accurate share detection.
  */
 export function classifySubjects(selected: any[], pool: any[]): ClassifiedSubject[] {
-  // share map by code (fallback by name) — counts unique branches that have it.
+  // share map by code (fallback by name) — counts unique branches that have it,
+  // expanding each pool entry into all of its `offeredTo` branches (master catalog)
+  // and falling back to its single legacy `branch` field.
   const branchesByKey: Record<string, Set<string>> = {};
   pool.forEach(s => {
     const key = normCode(s.subjectCode) || normName(s.subjectName);
     if (!key) return;
-    (branchesByKey[key] = branchesByKey[key] || new Set()).add(String(s.branch || ''));
+    const offs = getOfferings(s);
+    const branches = offs.length ? offs.map(o => o.branch) : [String(s.branch || '')];
+    branches.filter(Boolean).forEach(b => {
+      (branchesByKey[key] = branchesByKey[key] || new Set()).add(b);
+    });
   });
 
   return selected.map(s => {
@@ -63,11 +70,13 @@ export function classifySubjects(selected: any[], pool: any[]): ClassifiedSubjec
 export function buildBranchSimilarityMatrix(pool: any[]) {
   const byBranch: Record<string, Set<string>> = {};
   pool.forEach(s => {
-    const b = String(s.branch || '');
-    if (!b) return;
     const k = normCode(s.subjectCode) || normName(s.subjectName);
     if (!k) return;
-    (byBranch[b] = byBranch[b] || new Set()).add(k);
+    const offs = getOfferings(s);
+    const branches = offs.length ? offs.map(o => o.branch) : [String(s.branch || '')];
+    branches.filter(Boolean).forEach(b => {
+      (byBranch[b] = byBranch[b] || new Set()).add(k);
+    });
   });
   const branches = Object.keys(byBranch);
   const matrix: Record<string, Record<string, { sharedSubjects: number; sharedCodes: string[]; riskScore: number }>> = {};
