@@ -270,6 +270,68 @@ export default function AdminSubjects() {
     } finally { setUploadLoading(false); }
   };
 
+  // ---------- Multi-sheet upload ----------
+  const handleMultiSheetUpload = async (sheetResults: SheetResult[]) => {
+    if (!institutionId) return;
+    setUploadLoading(true);
+    try {
+      const existingCodes = new Set(subjects.map(s => s.subjectCode?.toLowerCase()));
+      const batch = writeBatch(db);
+      let inserted = 0;
+      let duplicates = 0;
+      const perSheet: Record<string, number> = {};
+
+      sheetResults.forEach(sheet => {
+        if (!sheet.validRows || sheet.validRows.length === 0) return;
+        sheet.validRows.forEach(r => {
+          const code = String(r.subjectCode || '').trim().toLowerCase();
+          if (!code) return;
+          if (existingCodes.has(code)) { duplicates++; return; }
+          existingCodes.add(code);
+          const ref = doc(collection(db, 'subjects'));
+          batch.set(ref, {
+            institutionId,
+            subjectCode: String(r.subjectCode).trim(),
+            subjectName: String(r.subjectName).trim(),
+            branch: String(r.branch).trim(),
+            year: String(r.year).trim(),
+            semester: String(r.semester || '').trim(),
+            credits: Number(r.credits) || 0,
+            regulation: String(r.regulation || '').trim(),
+            examType: String(r.examType || 'Theory').trim(),
+            status: String(r.status || 'Active').trim(),
+            sourceSheet: sheet.sheetName,
+            createdBy: (user as any)?.uid || null,
+            createdAt: serverTimestamp(),
+          });
+          inserted++;
+          perSheet[sheet.sheetName] = (perSheet[sheet.sheetName] || 0) + 1;
+        });
+      });
+
+      if (inserted === 0) {
+        toast({ title: 'Nothing to upload', description: 'All rows were duplicates or invalid.', variant: 'destructive' });
+        setUploadLoading(false);
+        return;
+      }
+
+      await batch.commit();
+      const breakdown = Object.entries(perSheet).map(([k, v]) => `${k}: ${v}`).join(' · ');
+      toast({
+        title: `${inserted} subjects uploaded across ${Object.keys(perSheet).length} sheet(s)`,
+        description: `${breakdown}${duplicates ? ` · ${duplicates} duplicate(s) skipped` : ''}`,
+      });
+      setShowUpload(false);
+      setPreviewData([]);
+      fetchAll();
+    } catch (e: any) {
+      console.error(e);
+      toast({ title: 'Multi-sheet upload failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setUploadLoading(false);
+    }
+  };
+
   return (
     <AdminLayout>
       <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8 animate-fade-in pb-12">
