@@ -21,6 +21,8 @@ import {
   serverTimestamp, writeBatch
 } from 'firebase/firestore';
 import { ExcelUpload } from '@/components/ui/ExcelUpload';
+import { MultiSheetExcelUpload, SheetResult } from '@/components/ui/MultiSheetExcelUpload';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const YEAR_OPTIONS = ['1st', '2nd', '3rd', '4th'];
 const SEMESTER_OPTIONS = ['1', '2', '3', '4', '5', '6', '7', '8'];
@@ -268,6 +270,68 @@ export default function AdminSubjects() {
     } finally { setUploadLoading(false); }
   };
 
+  // ---------- Multi-sheet upload ----------
+  const handleMultiSheetUpload = async (sheetResults: SheetResult[]) => {
+    if (!institutionId) return;
+    setUploadLoading(true);
+    try {
+      const existingCodes = new Set(subjects.map(s => s.subjectCode?.toLowerCase()));
+      const batch = writeBatch(db);
+      let inserted = 0;
+      let duplicates = 0;
+      const perSheet: Record<string, number> = {};
+
+      sheetResults.forEach(sheet => {
+        if (!sheet.validRows || sheet.validRows.length === 0) return;
+        sheet.validRows.forEach(r => {
+          const code = String(r.subjectCode || '').trim().toLowerCase();
+          if (!code) return;
+          if (existingCodes.has(code)) { duplicates++; return; }
+          existingCodes.add(code);
+          const ref = doc(collection(db, 'subjects'));
+          batch.set(ref, {
+            institutionId,
+            subjectCode: String(r.subjectCode).trim(),
+            subjectName: String(r.subjectName).trim(),
+            branch: String(r.branch).trim(),
+            year: String(r.year).trim(),
+            semester: String(r.semester || '').trim(),
+            credits: Number(r.credits) || 0,
+            regulation: String(r.regulation || '').trim(),
+            examType: String(r.examType || 'Theory').trim(),
+            status: String(r.status || 'Active').trim(),
+            sourceSheet: sheet.sheetName,
+            createdBy: (user as any)?.uid || null,
+            createdAt: serverTimestamp(),
+          });
+          inserted++;
+          perSheet[sheet.sheetName] = (perSheet[sheet.sheetName] || 0) + 1;
+        });
+      });
+
+      if (inserted === 0) {
+        toast({ title: 'Nothing to upload', description: 'All rows were duplicates or invalid.', variant: 'destructive' });
+        setUploadLoading(false);
+        return;
+      }
+
+      await batch.commit();
+      const breakdown = Object.entries(perSheet).map(([k, v]) => `${k}: ${v}`).join(' · ');
+      toast({
+        title: `${inserted} subjects uploaded across ${Object.keys(perSheet).length} sheet(s)`,
+        description: `${breakdown}${duplicates ? ` · ${duplicates} duplicate(s) skipped` : ''}`,
+      });
+      setShowUpload(false);
+      setPreviewData([]);
+      fetchAll();
+    } catch (e: any) {
+      console.error(e);
+      toast({ title: 'Multi-sheet upload failed', description: e.message, variant: 'destructive' });
+    } finally {
+      setUploadLoading(false);
+    }
+  };
+
   return (
     <AdminLayout>
       <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8 animate-fade-in pb-12">
@@ -493,19 +557,38 @@ export default function AdminSubjects() {
           <DialogContent className="max-w-3xl">
             <DialogHeader>
               <DialogTitle>Bulk Upload Subjects</DialogTitle>
-              <DialogDescription>Download the template, fill in details, then upload.</DialogDescription>
+              <DialogDescription>Use a single sheet or upload one workbook with multiple year-wise sheets.</DialogDescription>
             </DialogHeader>
-            <ExcelUpload
-              templateHeaders={templateHeaders}
-              templateName="subject_template.xlsx"
-              schemaMapping={schemaMapping}
-              requiredFields={requiredFields}
-              onDataParsed={setPreviewData}
-              previewData={previewData}
-              onUpload={handleBulkUpload}
-              uploadLoading={uploadLoading}
-              previewColumns={previewColumns}
-            />
+            <Tabs defaultValue="single" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="single">Single Sheet</TabsTrigger>
+                <TabsTrigger value="multi">Multi-Sheet Workbook</TabsTrigger>
+              </TabsList>
+              <TabsContent value="single" className="mt-4">
+                <ExcelUpload
+                  templateHeaders={templateHeaders}
+                  templateName="subject_template.xlsx"
+                  schemaMapping={schemaMapping}
+                  requiredFields={requiredFields}
+                  onDataParsed={setPreviewData}
+                  previewData={previewData}
+                  onUpload={handleBulkUpload}
+                  uploadLoading={uploadLoading}
+                  previewColumns={previewColumns}
+                />
+              </TabsContent>
+              <TabsContent value="multi" className="mt-4">
+                <MultiSheetExcelUpload
+                  templateHeaders={templateHeaders}
+                  templateName="subject_template_multisheet.xlsx"
+                  sheetTemplates={['1st Year', '2nd Year', '3rd Year', '4th Year']}
+                  schemaMapping={schemaMapping}
+                  requiredFields={requiredFields}
+                  onUpload={handleMultiSheetUpload}
+                  uploadLoading={uploadLoading}
+                />
+              </TabsContent>
+            </Tabs>
           </DialogContent>
         </Dialog>
 

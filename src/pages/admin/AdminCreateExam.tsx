@@ -15,7 +15,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
 import { Sparkles, Activity, BookOpen, Users, Layers, Calendar } from 'lucide-react';
 import { YEAR_LABELS, normYear, SLOT_TIMES } from '@/lib/examUtils';
-import { classifySubjects, buildBranchSimilarityMatrix } from '@/lib/examOptimizer';
+import { classifySubjects, buildBranchSimilarityMatrix, detectSubjectFamilies } from '@/lib/examOptimizer';
 
 const EXAM_TYPES = [
   'Internal Assessment', 'Mid Examination', 'Semester Examination',
@@ -142,6 +142,7 @@ export default function AdminCreateExam() {
       const classifications = classifySubjects(selectedSubjectsData, subjects);
       const branchSimilarity = buildBranchSimilarityMatrix(subjects.filter(s => form.branches.includes(s.branch)));
       const commonSubjectCodes = Array.from(new Set(classifications.filter(c => c.classification === 'COMMON').map(c => c.subjectCode)));
+      const subjectFamilies = detectSubjectFamilies(selectedSubjectsData);
 
       await addDoc(collection(db, 'examSessions'), {
         institutionId,
@@ -158,6 +159,7 @@ export default function AdminCreateExam() {
         subjectClassifications: classifications,
         branchSimilarity,
         commonSubjectCodes,
+        subjectFamilies,
         rules: form.rules,
         totalStudents: metrics.totalStudents,
         totalSubjects: metrics.totalSubjects,
