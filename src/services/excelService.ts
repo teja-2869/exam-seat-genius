@@ -34,6 +34,37 @@ export const parseExcel = async (file: File): Promise<any[]> => {
     });
 };
 
+/**
+ * Parse ALL sheets of a workbook. Returns an array of { sheetName, rows }.
+ * Each row is the raw JSON object exactly as produced by sheet_to_json.
+ * Empty sheets are still returned (so the UI can flag them).
+ */
+export const parseExcelAllSheets = async (
+    file: File
+): Promise<Array<{ sheetName: string; rows: any[] }>> => {
+    return new Promise((resolve, reject) => {
+        if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+            reject(new Error('Invalid file format. Please upload an Excel (.xlsx or .xls) file.'));
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const wb = XLSX.read(e.target?.result, { type: 'binary' });
+                const out = wb.SheetNames.map((name) => ({
+                    sheetName: name,
+                    rows: XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: '' }) as any[],
+                }));
+                resolve(out);
+            } catch (err) {
+                reject(err);
+            }
+        };
+        reader.onerror = (err) => reject(err);
+        reader.readAsBinaryString(file);
+    });
+};
+
 export const validateData = (data: any[], schemaMapping: Record<string, string>, requiredFields: string[]): any[] => {
     return data.map((row) => {
         const mappedRow: any = {};
