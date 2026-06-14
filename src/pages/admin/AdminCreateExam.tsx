@@ -16,6 +16,7 @@ import { toast } from '@/hooks/use-toast';
 import { Sparkles, Activity, BookOpen, Users, Layers, Calendar } from 'lucide-react';
 import { YEAR_LABELS, normYear, SLOT_TIMES } from '@/lib/examUtils';
 import { classifySubjects, buildBranchSimilarityMatrix, detectSubjectFamilies } from '@/lib/examOptimizer';
+import { subjectOffers, getOfferings } from '@/lib/subjectUtils';
 
 const EXAM_TYPES = [
   'Internal Assessment', 'Mid Examination', 'Semester Examination',
@@ -66,14 +67,21 @@ export default function AdminCreateExam() {
     })();
   }, [institutionId]);
 
-  // Filter subjects matching current selection
+  // Filter subjects matching current selection (uses master catalog offeredTo[]).
   const matchingSubjects = useMemo(() => {
     return subjects.filter(s => {
-      if (form.branches.length && !form.branches.includes(s.branch)) return false;
-      if (form.years.length && !form.years.map(normYear).includes(normYear(s.year))) return false;
-      if (form.semester && String(s.semester) !== String(form.semester)) return false;
       if (form.regulation && s.regulation && s.regulation !== form.regulation) return false;
-      return true;
+      const offs = getOfferings(s);
+      if (offs.length === 0) return false;
+      // Subject must offer at least one (branch, semester) the user picked.
+      const branchSel = form.branches.length ? form.branches : null;
+      const yearSel = form.years.length ? form.years.map(normYear) : null;
+      return offs.some(o => {
+        if (branchSel && !branchSel.includes(o.branch)) return false;
+        if (form.semester && String(o.semester) !== String(form.semester)) return false;
+        if (yearSel && !yearSel.includes(normYear(o.year))) return false;
+        return true;
+      });
     });
   }, [subjects, form.branches, form.years, form.semester, form.regulation]);
 
