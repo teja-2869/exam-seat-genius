@@ -142,6 +142,7 @@ export default function AdminCreateExam() {
       const classifications = classifySubjects(selectedSubjectsData, subjects);
       const branchSimilarity = buildBranchSimilarityMatrix(subjects.filter(s => form.branches.includes(s.branch)));
       const commonSubjectCodes = Array.from(new Set(classifications.filter(c => c.classification === 'COMMON').map(c => c.subjectCode)));
+      const subjectFamilies = detectSubjectFamilies(selectedSubjectsData);
 
       await addDoc(collection(db, 'examSessions'), {
         institutionId,
@@ -158,6 +159,7 @@ export default function AdminCreateExam() {
         subjectClassifications: classifications,
         branchSimilarity,
         commonSubjectCodes,
+        subjectFamilies,
         rules: form.rules,
         totalStudents: metrics.totalStudents,
         totalSubjects: metrics.totalSubjects,
