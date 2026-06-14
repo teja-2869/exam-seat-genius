@@ -16,6 +16,7 @@ import { toast } from '@/hooks/use-toast';
 import { Sparkles, Activity, BookOpen, Users, Layers, Calendar } from 'lucide-react';
 import { YEAR_LABELS, normYear, SLOT_TIMES } from '@/lib/examUtils';
 import { classifySubjects, buildBranchSimilarityMatrix, detectSubjectFamilies } from '@/lib/examOptimizer';
+import { subjectOffers, getOfferings } from '@/lib/subjectUtils';
 
 const EXAM_TYPES = [
   'Internal Assessment', 'Mid Examination', 'Semester Examination',
@@ -66,14 +67,21 @@ export default function AdminCreateExam() {
     })();
   }, [institutionId]);
 
-  // Filter subjects matching current selection
+  // Filter subjects matching current selection (uses master catalog offeredTo[]).
   const matchingSubjects = useMemo(() => {
     return subjects.filter(s => {
-      if (form.branches.length && !form.branches.includes(s.branch)) return false;
-      if (form.years.length && !form.years.map(normYear).includes(normYear(s.year))) return false;
-      if (form.semester && String(s.semester) !== String(form.semester)) return false;
       if (form.regulation && s.regulation && s.regulation !== form.regulation) return false;
-      return true;
+      const offs = getOfferings(s);
+      if (offs.length === 0) return false;
+      // Subject must offer at least one (branch, semester) the user picked.
+      const branchSel = form.branches.length ? form.branches : null;
+      const yearSel = form.years.length ? form.years.map(normYear) : null;
+      return offs.some(o => {
+        if (branchSel && !branchSel.includes(o.branch)) return false;
+        if (form.semester && String(o.semester) !== String(form.semester)) return false;
+        if (yearSel && !yearSel.includes(normYear(o.year))) return false;
+        return true;
+      });
     });
   }, [subjects, form.branches, form.years, form.semester, form.regulation]);
 
@@ -130,17 +138,37 @@ export default function AdminCreateExam() {
 
     setSaving(true);
     try {
-      const selectedSubjectsData = subjects
+      // Expand each selected master subject into one entry per (branch, semester)
+      // offering that matches the form's branch/year/semester selections.
+      const selectedSubjectsData: any[] = [];
+      subjects
         .filter(s => form.selectedSubjectIds.includes(s.id))
-        .map(s => ({
-          id: s.id, subjectCode: s.subjectCode, subjectName: s.subjectName,
-          branch: s.branch, year: normYear(s.year), semester: String(s.semester),
-          credits: s.credits || 0,
-        }));
+        .forEach(s => {
+          const offs = getOfferings(s);
+          const yearSel = form.years.map(normYear);
+          const matched = offs.filter(o =>
+            form.branches.includes(o.branch) &&
+            (!form.semester || String(o.semester) === String(form.semester)) &&
+            (yearSel.length === 0 || yearSel.includes(normYear(o.year)))
+          );
+          (matched.length ? matched : offs).forEach(o => {
+            selectedSubjectsData.push({
+              id: s.id,
+              subjectCode: s.subjectCode,
+              subjectName: s.subjectName,
+              branch: o.branch,
+              year: normYear(o.year),
+              semester: String(o.semester),
+              credits: s.credits || 0,
+            });
+          });
+        });
 
       // AI: classify subjects and build branch similarity from full institution subject pool
       const classifications = classifySubjects(selectedSubjectsData, subjects);
-      const branchSimilarity = buildBranchSimilarityMatrix(subjects.filter(s => form.branches.includes(s.branch)));
+      const branchSimilarity = buildBranchSimilarityMatrix(subjects.filter(s =>
+        getOfferings(s).some(o => form.branches.includes(o.branch))
+      ));
       const commonSubjectCodes = Array.from(new Set(classifications.filter(c => c.classification === 'COMMON').map(c => c.subjectCode)));
       const subjectFamilies = detectSubjectFamilies(selectedSubjectsData);
 
