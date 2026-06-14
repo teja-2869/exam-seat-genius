@@ -88,6 +88,44 @@ export function buildBranchSimilarityMatrix(pool: any[]) {
   return matrix;
 }
 
+export interface SubjectFamily {
+  familyId: string;
+  familyName: string;
+  subjects: Array<{ id?: string; subjectCode: string; subjectName: string; branch: string; year: string }>;
+  branches: string[];
+  riskLevel: SeatingRisk;
+}
+
+/** Group subjects with the same normalized name into families (cross-branch). */
+export function detectSubjectFamilies(pool: any[]): SubjectFamily[] {
+  const byName: Record<string, any[]> = {};
+  pool.forEach(s => {
+    const key = normName(s.subjectName);
+    if (!key) return;
+    (byName[key] = byName[key] || []).push(s);
+  });
+  const families: SubjectFamily[] = [];
+  Object.entries(byName).forEach(([key, items]) => {
+    const branches = Array.from(new Set(items.map(s => String(s.branch || '')).filter(Boolean)));
+    if (branches.length < 2 && items.length < 2) return; // single-branch isn't a family
+    const risk: SeatingRisk = branches.length >= 3 ? 'HIGH' : branches.length === 2 ? 'MEDIUM' : 'LOW';
+    families.push({
+      familyId: `fam_${key.replace(/[^a-z0-9]+/g, '_').slice(0, 40)}`,
+      familyName: items[0].subjectName,
+      subjects: items.map(s => ({
+        id: s.id,
+        subjectCode: s.subjectCode,
+        subjectName: s.subjectName,
+        branch: s.branch,
+        year: normYear(s.year),
+      })),
+      branches,
+      riskLevel: risk,
+    });
+  });
+  return families.sort((a, b) => b.subjects.length - a.subjects.length);
+}
+
 /** Risk that a subject session will be hard to seat conflict-free. */
 export function computeSeatingRisk(
   subject: { classification: SubjectClass },
