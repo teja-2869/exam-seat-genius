@@ -557,19 +557,38 @@ export default function AdminSubjects() {
           <DialogContent className="max-w-3xl">
             <DialogHeader>
               <DialogTitle>Bulk Upload Subjects</DialogTitle>
-              <DialogDescription>Download the template, fill in details, then upload.</DialogDescription>
+              <DialogDescription>Use a single sheet or upload one workbook with multiple year-wise sheets.</DialogDescription>
             </DialogHeader>
-            <ExcelUpload
-              templateHeaders={templateHeaders}
-              templateName="subject_template.xlsx"
-              schemaMapping={schemaMapping}
-              requiredFields={requiredFields}
-              onDataParsed={setPreviewData}
-              previewData={previewData}
-              onUpload={handleBulkUpload}
-              uploadLoading={uploadLoading}
-              previewColumns={previewColumns}
-            />
+            <Tabs defaultValue="single" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="single">Single Sheet</TabsTrigger>
+                <TabsTrigger value="multi">Multi-Sheet Workbook</TabsTrigger>
+              </TabsList>
+              <TabsContent value="single" className="mt-4">
+                <ExcelUpload
+                  templateHeaders={templateHeaders}
+                  templateName="subject_template.xlsx"
+                  schemaMapping={schemaMapping}
+                  requiredFields={requiredFields}
+                  onDataParsed={setPreviewData}
+                  previewData={previewData}
+                  onUpload={handleBulkUpload}
+                  uploadLoading={uploadLoading}
+                  previewColumns={previewColumns}
+                />
+              </TabsContent>
+              <TabsContent value="multi" className="mt-4">
+                <MultiSheetExcelUpload
+                  templateHeaders={templateHeaders}
+                  templateName="subject_template_multisheet.xlsx"
+                  sheetTemplates={['1st Year', '2nd Year', '3rd Year', '4th Year']}
+                  schemaMapping={schemaMapping}
+                  requiredFields={requiredFields}
+                  onUpload={handleMultiSheetUpload}
+                  uploadLoading={uploadLoading}
+                />
+              </TabsContent>
+            </Tabs>
           </DialogContent>
         </Dialog>
 
