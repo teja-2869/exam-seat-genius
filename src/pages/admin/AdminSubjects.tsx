@@ -21,6 +21,8 @@ import {
   serverTimestamp, writeBatch
 } from 'firebase/firestore';
 import { ExcelUpload } from '@/components/ui/ExcelUpload';
+import { MultiSheetExcelUpload, SheetResult } from '@/components/ui/MultiSheetExcelUpload';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const YEAR_OPTIONS = ['1st', '2nd', '3rd', '4th'];
 const SEMESTER_OPTIONS = ['1', '2', '3', '4', '5', '6', '7', '8'];
