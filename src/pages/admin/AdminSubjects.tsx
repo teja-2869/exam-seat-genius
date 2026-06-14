@@ -50,6 +50,7 @@ interface SubjectDoc {
   year?: string;
   semester?: string;
   deleted?: boolean;
+  createdAt?: any;
 }
 
 const emptyForm = () => ({
