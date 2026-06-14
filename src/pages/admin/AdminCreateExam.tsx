@@ -138,17 +138,37 @@ export default function AdminCreateExam() {
 
     setSaving(true);
     try {
-      const selectedSubjectsData = subjects
+      // Expand each selected master subject into one entry per (branch, semester)
+      // offering that matches the form's branch/year/semester selections.
+      const selectedSubjectsData: any[] = [];
+      subjects
         .filter(s => form.selectedSubjectIds.includes(s.id))
-        .map(s => ({
-          id: s.id, subjectCode: s.subjectCode, subjectName: s.subjectName,
-          branch: s.branch, year: normYear(s.year), semester: String(s.semester),
-          credits: s.credits || 0,
-        }));
+        .forEach(s => {
+          const offs = getOfferings(s);
+          const yearSel = form.years.map(normYear);
+          const matched = offs.filter(o =>
+            form.branches.includes(o.branch) &&
+            (!form.semester || String(o.semester) === String(form.semester)) &&
+            (yearSel.length === 0 || yearSel.includes(normYear(o.year)))
+          );
+          (matched.length ? matched : offs).forEach(o => {
+            selectedSubjectsData.push({
+              id: s.id,
+              subjectCode: s.subjectCode,
+              subjectName: s.subjectName,
+              branch: o.branch,
+              year: normYear(o.year),
+              semester: String(o.semester),
+              credits: s.credits || 0,
+            });
+          });
+        });
 
       // AI: classify subjects and build branch similarity from full institution subject pool
       const classifications = classifySubjects(selectedSubjectsData, subjects);
-      const branchSimilarity = buildBranchSimilarityMatrix(subjects.filter(s => form.branches.includes(s.branch)));
+      const branchSimilarity = buildBranchSimilarityMatrix(subjects.filter(s =>
+        getOfferings(s).some(o => form.branches.includes(o.branch))
+      ));
       const commonSubjectCodes = Array.from(new Set(classifications.filter(c => c.classification === 'COMMON').map(c => c.subjectCode)));
       const subjectFamilies = detectSubjectFamilies(selectedSubjectsData);
 
