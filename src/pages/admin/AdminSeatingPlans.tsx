@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import {
   ClipboardList, LayoutGrid, Download, Filter, Search, Activity, Calendar,
-  Monitor, MapPin, FileText, Users, Building2
+  Monitor, MapPin, FileText, Users, Building2, AlertTriangle, FileSpreadsheet
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -11,12 +11,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { db } from '@/lib/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { toast } from '@/hooks/use-toast';
+import {
+  buildStudentRegister, exportStudentRegisterPDF, exportStudentRegisterExcel,
+  exportRoomWiseRegisterPDF, exportBlockWiseRegisterPDF, exportBranchWiseRegisterPDF,
+  exportMasterRegisterPDF, exportMasterRegisterExcel,
+} from '@/lib/seatingRegisters';
 
 /**
  * Build a row-major matrix of benches from the flat `seats` array stored in Firestore.
@@ -71,6 +76,7 @@ export default function AdminSeatingPlans() {
   const [search, setSearch] = useState('');
 
   const [selectedRoom, setSelectedRoom] = useState<any | null>(null);
+  const [conflictsOpen, setConflictsOpen] = useState(false);
 
   useEffect(() => {
     if (!institutionId) return;
@@ -214,17 +220,47 @@ export default function AdminSeatingPlans() {
             <h1 className="text-2xl sm:text-3xl font-display font-bold mb-1">Seating Plans</h1>
             <p className="text-muted-foreground">Visualize and export generated seating arrangements.</p>
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button disabled={filteredPlans.length === 0}><Download className="w-4 h-4 mr-2" /> Export</Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onClick={exportStudentWise}><Users className="w-4 h-4 mr-2" /> Student-wise PDF</DropdownMenuItem>
-              <DropdownMenuItem onClick={exportInvigilator}><ClipboardList className="w-4 h-4 mr-2" /> Invigilator Sheet</DropdownMenuItem>
-              <DropdownMenuItem onClick={exportMaster}><FileText className="w-4 h-4 mr-2" /> Master Report</DropdownMenuItem>
-              {fBlock !== 'All' && <DropdownMenuItem onClick={() => exportBlockWise(fBlock)}><Building2 className="w-4 h-4 mr-2" /> Block {fBlock} PDF</DropdownMenuItem>}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setConflictsOpen(true)} disabled={filteredPlans.length === 0}>
+              <AlertTriangle className="w-4 h-4 mr-2" /> Conflicts
+              {(() => { const n = filteredPlans.reduce((a, p) => a + (p.conflictCount || 0), 0); return n > 0 ? <Badge className="ml-2 bg-red-100 text-red-700 hover:bg-red-100">{n}</Badge> : null; })()}
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button disabled={filteredPlans.length === 0}><Download className="w-4 h-4 mr-2" /> Export</Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuLabel>Registers (University format)</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => exportStudentRegisterPDF(buildStudentRegister(filteredPlans as any), { institutionName: (college as any)?.name || 'Institution', examName: activeSession?.examName || 'Exam' })}>
+                  <FileText className="w-4 h-4 mr-2" /> Student Seating Register (PDF)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportStudentRegisterExcel(buildStudentRegister(filteredPlans as any), { examName: activeSession?.examName || 'Exam' })}>
+                  <FileSpreadsheet className="w-4 h-4 mr-2" /> Student Register (Excel)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportRoomWiseRegisterPDF(filteredPlans as any, { institutionName: (college as any)?.name || 'Institution', examName: activeSession?.examName || 'Exam' })}>
+                  <LayoutGrid className="w-4 h-4 mr-2" /> Room-wise Register
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportBlockWiseRegisterPDF(filteredPlans as any, { institutionName: (college as any)?.name || 'Institution', examName: activeSession?.examName || 'Exam' })}>
+                  <Building2 className="w-4 h-4 mr-2" /> Block-wise Register
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportBranchWiseRegisterPDF(filteredPlans as any, { institutionName: (college as any)?.name || 'Institution', examName: activeSession?.examName || 'Exam' })}>
+                  <Users className="w-4 h-4 mr-2" /> Branch-wise Register
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportMasterRegisterPDF(filteredPlans as any, { institutionName: (college as any)?.name || 'Institution', examName: activeSession?.examName || 'Exam' })}>
+                  <FileText className="w-4 h-4 mr-2" /> Master Register (PDF)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportMasterRegisterExcel(filteredPlans as any, { examName: activeSession?.examName || 'Exam' })}>
+                  <FileSpreadsheet className="w-4 h-4 mr-2" /> Master Register (Excel)
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>Legacy</DropdownMenuLabel>
+                <DropdownMenuItem onClick={exportStudentWise}><Users className="w-4 h-4 mr-2" /> Student-wise PDF</DropdownMenuItem>
+                <DropdownMenuItem onClick={exportInvigilator}><ClipboardList className="w-4 h-4 mr-2" /> Invigilator Sheet</DropdownMenuItem>
+                <DropdownMenuItem onClick={exportMaster}><FileText className="w-4 h-4 mr-2" /> Master Report</DropdownMenuItem>
+                {fBlock !== 'All' && <DropdownMenuItem onClick={() => exportBlockWise(fBlock)}><Building2 className="w-4 h-4 mr-2" /> Block {fBlock} PDF</DropdownMenuItem>}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
         {/* Filters */}
@@ -366,6 +402,39 @@ export default function AdminSeatingPlans() {
               <Button onClick={() => exportRoomWise(selectedRoom)}><Download className="w-4 h-4 mr-2" /> Export Room PDF</Button>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Conflict Report Dialog */}
+      <Dialog open={conflictsOpen} onOpenChange={setConflictsOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-amber-600" /> Conflict Report</DialogTitle>
+          </DialogHeader>
+          <div className="overflow-auto">
+            {(() => {
+              const all = filteredPlans.flatMap(p => (p.conflicts || []).map((c: any) => ({ ...c, room: p.roomNumber, block: p.blockNumber, date: p.examDate, slot: p.examSlot })));
+              if (all.length === 0) return <div className="p-8 text-center text-emerald-700 bg-emerald-50 rounded-lg">No conflicts detected. ✔</div>;
+              return (
+                <table className="w-full text-sm border-collapse">
+                  <thead className="bg-muted/40 text-xs uppercase">
+                    <tr><th className="px-2 py-2 text-left">Type</th><th className="px-2 py-2 text-left">Date</th><th className="px-2 py-2 text-left">Slot</th><th className="px-2 py-2 text-left">Block</th><th className="px-2 py-2 text-left">Room</th><th className="px-2 py-2 text-left">Seat</th><th className="px-2 py-2 text-left">Roll A</th><th className="px-2 py-2 text-left">Roll B</th><th className="px-2 py-2 text-left">Subject</th></tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {all.map((c, i) => (
+                      <tr key={i} className="hover:bg-muted/20">
+                        <td className="px-2 py-1"><Badge className={`text-[10px] ${c.type === 'duplicate' ? 'bg-red-100 text-red-700' : c.type === 'adjacent' ? 'bg-amber-100 text-amber-700' : 'bg-yellow-100 text-yellow-700'}`}>{c.type}</Badge></td>
+                        <td className="px-2 py-1">{c.date}</td><td className="px-2 py-1">{c.slot}</td><td className="px-2 py-1">{c.block}</td><td className="px-2 py-1">{c.room}</td>
+                        <td className="px-2 py-1 font-mono text-xs">R{c.row}-C{c.col}</td>
+                        <td className="px-2 py-1 font-mono text-xs">{c.rollA}</td><td className="px-2 py-1 font-mono text-xs">{c.rollB}</td>
+                        <td className="px-2 py-1 font-mono text-xs">{c.subject}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              );
+            })()}
+          </div>
         </DialogContent>
       </Dialog>
     </AdminLayout>
