@@ -76,6 +76,7 @@ export default function AdminSeatingPlans() {
   const [search, setSearch] = useState('');
 
   const [selectedRoom, setSelectedRoom] = useState<any | null>(null);
+  const [conflictsOpen, setConflictsOpen] = useState(false);
 
   useEffect(() => {
     if (!institutionId) return;
