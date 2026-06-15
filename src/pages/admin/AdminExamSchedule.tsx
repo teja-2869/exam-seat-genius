@@ -98,6 +98,10 @@ export default function AdminExamSchedule() {
       const subjects: any[] = activeSession.subjects || [];
       const classifications: any[] = activeSession.subjectClassifications || [];
       const similarity = activeSession.branchSimilarity || {};
+      // Auto-detect branch groups (Group-A: CSE/CSM/CSD, Group-B: ECE/EEE, ...).
+      // Manual overrides come from branch docs (field: groupOverride).
+      const branchOverrides: Record<string, string> = activeSession.branchGroupOverrides || {};
+      const { branchToGroup } = detectBranchGroups(activeSession.subjects || [], branchOverrides);
       const classOf = (id: string) => classifications.find(c => c.id === id)?.classification || 'BRANCH';
 
       // Risk-aware ordering: HIGH-risk COMMON first (spread across days), then CORE, then BRANCH, then LAB
