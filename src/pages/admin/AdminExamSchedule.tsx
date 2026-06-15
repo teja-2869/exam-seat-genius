@@ -132,6 +132,8 @@ export default function AdminExamSchedule() {
           if (!rules.includeSunday && isSunday(cursor)) { cursor = addDays(cursor, 1); continue; }
           // HIGH-risk COMMON: only one per day
           if (isHighRisk && dateHasHighRisk[cursor]) { cursor = addDays(cursor, 1); continue; }
+          // For HIGH-risk subjects, avoid placing another HIGH-risk paper from the same branch-group on the same day.
+          if (isHighRisk && (dateHighRiskGroups[cursor]?.has(subjectGroup))) { cursor = addDays(cursor, 1); continue; }
           const gapOk = cohorts.every(c => {
             const last = cohortLast[c];
             if (!last) return true;
