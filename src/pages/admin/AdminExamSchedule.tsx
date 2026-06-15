@@ -118,12 +118,15 @@ export default function AdminExamSchedule() {
       const dateSlotUsed: Record<string, Set<string>> = {};
       const dateHasHighRisk: Record<string, boolean> = {};
       const dateSlotSubjects: Record<string, Set<string>> = {}; // `${date}|${slot}` -> subjectCodes
+      // Track HIGH-risk branch groups already placed on a date to avoid grouping similar branches together.
+      const dateHighRiskGroups: Record<string, Set<string>> = {};
       const minGap = Math.max(0, parseInt(rules.minGapDays) || 0);
       const maxPerDay = Math.max(1, parseInt(rules.maxPerDay) || 1);
       const slots = ['Morning', 'Afternoon'];
       const startBase = todayPlus(3);
 
       const findSlot = (cohorts: string[], subjectCode: string, isHighRisk: boolean, primaryBranch: string): { date: string; slot: string } => {
+        const subjectGroup = branchToGroup[primaryBranch] || primaryBranch;
         let cursor = startBase;
         for (let safety = 0; safety < 365; safety++) {
           if (!rules.includeSunday && isSunday(cursor)) { cursor = addDays(cursor, 1); continue; }
