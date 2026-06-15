@@ -192,7 +192,10 @@ export default function AdminExamSchedule() {
           dateSlotUsed[date] = dateSlotUsed[date] || new Set();
           dateSlotUsed[date].add(`${slot}|${c}`);
         });
-        if (isHighRisk) dateHasHighRisk[date] = true;
+        if (isHighRisk) {
+          dateHasHighRisk[date] = true;
+          (dateHighRiskGroups[date] = dateHighRiskGroups[date] || new Set()).add(branchToGroup[sub.branch] || sub.branch);
+        }
         const slotKey = `${date}|${slot}`;
         (dateSlotSubjects[slotKey] = dateSlotSubjects[slotKey] || new Set()).add(sub.subjectCode);
 
