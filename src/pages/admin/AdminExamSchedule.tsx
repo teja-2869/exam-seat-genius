@@ -330,14 +330,44 @@ export default function AdminExamSchedule() {
                 <CardDescription>{activeSession ? `${activeSession.subjects?.length || 0} subjects • ${activeSession.branches?.join(', ')}` : '—'}</CardDescription>
               </div>
               {activeSession && (
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <Button onClick={handleGenerate} disabled={generating}>
                     {generating ? <><Activity className="w-4 h-4 mr-2 animate-spin" />Generating</> : <><Sparkles className="w-4 h-4 mr-2" />Generate Schedule</>}
                   </Button>
                   {scheduleRows.length > 0 && (
-                    <Button variant="outline" onClick={() => navigate('/admin-generate-seating')}>
-                      Next: Seating <ArrowRight className="w-4 h-4 ml-2" />
-                    </Button>
+                    <>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline"><Download className="w-4 h-4 mr-2" /> Export</Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => exportTimetablePDF({
+                            matrix: buildTimetableMatrix(scheduleRows, activeSession.branches),
+                            institutionName: college?.name || (college as any)?.institutionName || 'Institution',
+                            examName: activeSession.examName,
+                            academicYear: activeSession.academicYear,
+                            semester: activeSession.semester,
+                            regulation: activeSession.regulation,
+                          })}><FileText className="w-4 h-4 mr-2" /> Timetable PDF</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => exportTimetableExcel({
+                            matrix: buildTimetableMatrix(scheduleRows, activeSession.branches),
+                            institutionName: college?.name || 'Institution',
+                            examName: activeSession.examName,
+                          })}><FileSpreadsheet className="w-4 h-4 mr-2" /> Timetable Excel</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => printTimetable({
+                            matrix: buildTimetableMatrix(scheduleRows, activeSession.branches),
+                            institutionName: college?.name || 'Institution',
+                            examName: activeSession.examName,
+                            academicYear: activeSession.academicYear,
+                            semester: activeSession.semester,
+                            regulation: activeSession.regulation,
+                          })}><Printer className="w-4 h-4 mr-2" /> Print View</DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <Button variant="outline" onClick={() => navigate('/admin-generate-seating')}>
+                        Next: Seating <ArrowRight className="w-4 h-4 ml-2" />
+                      </Button>
+                    </>
                   )}
                 </div>
               )}
@@ -352,39 +382,93 @@ export default function AdminExamSchedule() {
                   <p className="text-xs mt-1">Click <strong>Generate Schedule</strong> to let AI build the timetable.</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto border rounded-lg">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
-                      <tr>
-                        <th className="px-3 py-2 text-left">Date</th>
-                        <th className="px-3 py-2 text-left">Session</th>
-                        <th className="px-3 py-2 text-left">Code</th>
-                        <th className="px-3 py-2 text-left">Subject</th>
-                        <th className="px-3 py-2 text-left">Year</th>
-                        <th className="px-3 py-2 text-left">Branch</th>
-                        <th className="px-3 py-2 text-left">Students</th>
-                        <th className="px-3 py-2 text-left">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {scheduleRows.map(r => (
-                        <tr key={r.id} className="hover:bg-muted/20">
-                          <td className="px-3 py-2 font-medium">{r.date}</td>
-                          <td className="px-3 py-2">
-                            <Badge variant="outline" className="text-[10px]">{r.slot}</Badge>
-                            <div className="text-[10px] text-muted-foreground mt-0.5">{r.startTime}-{r.endTime}</div>
-                          </td>
-                          <td className="px-3 py-2 font-mono text-xs">{r.subjectCode}</td>
-                          <td className="px-3 py-2">{r.subjectName}</td>
-                          <td className="px-3 py-2">{r.year}</td>
-                          <td className="px-3 py-2">{(r.branches || []).join(', ')}</td>
-                          <td className="px-3 py-2 tabular-nums">{r.studentCount}</td>
-                          <td className="px-3 py-2"><Badge className="text-[10px] bg-emerald-100 text-emerald-700">{r.status}</Badge></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <Tabs defaultValue="matrix" className="w-full">
+                  <TabsList className="mb-3">
+                    <TabsTrigger value="matrix"><Grid3x3 className="w-4 h-4 mr-2" />Matrix (Date × Branch)</TabsTrigger>
+                    <TabsTrigger value="list"><List className="w-4 h-4 mr-2" />List View</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="matrix">
+                    {(() => {
+                      const m = buildTimetableMatrix(scheduleRows, activeSession.branches);
+                      return (
+                        <div className="overflow-x-auto border rounded-lg">
+                          <table className="w-full text-xs border-collapse">
+                            <thead>
+                              <tr className="bg-primary text-primary-foreground">
+                                <th className="px-2 py-2 border border-primary/40 text-left sticky left-0 bg-primary">Date</th>
+                                {m.branches.map(b => (
+                                  <th key={b} className="px-2 py-2 border border-primary/40 text-center min-w-[140px]">{b}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {m.dates.map(d => (
+                                <tr key={d} className="hover:bg-muted/20">
+                                  <td className="px-2 py-2 border bg-muted/40 font-medium sticky left-0">{d}</td>
+                                  {m.branches.map(b => {
+                                    const cells = m.rows[d]?.[b] || [];
+                                    return (
+                                      <td key={b} className="px-2 py-2 border text-center align-top">
+                                        {cells.length === 0 ? <span className="text-muted-foreground">—</span>
+                                          : cells.map((c, i) => (
+                                            <div key={i} className={i > 0 ? 'border-t border-dashed mt-1 pt-1' : ''}>
+                                              <div className="font-mono font-semibold">{c.subjectCode}</div>
+                                              <div className="text-[10px] text-muted-foreground leading-tight">{c.subjectName}</div>
+                                              {cells.length > 1 && <Badge variant="outline" className="text-[9px] mt-0.5">{c.slot}</Badge>}
+                                            </div>
+                                          ))}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                          <div className="px-3 py-2 text-[10px] text-muted-foreground bg-muted/20 border-t flex gap-3 flex-wrap">
+                            {Object.entries(m.slots).map(([k, v]) => <span key={k}><strong>{k}:</strong> {v.start}–{v.end}</span>)}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </TabsContent>
+
+                  <TabsContent value="list">
+                    <div className="overflow-x-auto border rounded-lg">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
+                          <tr>
+                            <th className="px-3 py-2 text-left">Date</th>
+                            <th className="px-3 py-2 text-left">Session</th>
+                            <th className="px-3 py-2 text-left">Code</th>
+                            <th className="px-3 py-2 text-left">Subject</th>
+                            <th className="px-3 py-2 text-left">Year</th>
+                            <th className="px-3 py-2 text-left">Branch</th>
+                            <th className="px-3 py-2 text-left">Students</th>
+                            <th className="px-3 py-2 text-left">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {scheduleRows.map(r => (
+                            <tr key={r.id} className="hover:bg-muted/20">
+                              <td className="px-3 py-2 font-medium">{r.date}</td>
+                              <td className="px-3 py-2">
+                                <Badge variant="outline" className="text-[10px]">{r.slot}</Badge>
+                                <div className="text-[10px] text-muted-foreground mt-0.5">{r.startTime}-{r.endTime}</div>
+                              </td>
+                              <td className="px-3 py-2 font-mono text-xs">{r.subjectCode}</td>
+                              <td className="px-3 py-2">{r.subjectName}</td>
+                              <td className="px-3 py-2">{r.year}</td>
+                              <td className="px-3 py-2">{(r.branches || []).join(', ')}</td>
+                              <td className="px-3 py-2 tabular-nums">{r.studentCount}</td>
+                              <td className="px-3 py-2"><Badge className="text-[10px] bg-emerald-100 text-emerald-700">{r.status}</Badge></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </TabsContent>
+                </Tabs>
               )}
             </CardContent>
           </Card>
