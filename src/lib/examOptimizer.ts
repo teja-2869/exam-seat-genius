@@ -97,6 +97,59 @@ export function buildBranchSimilarityMatrix(pool: any[]) {
   return matrix;
 }
 
+/**
+ * Auto-detect branch groups by combining:
+ *   (a) branch-code prefix (CSE/CSM/CSD/CSC -> "CS")
+ *   (b) shared-subject similarity matrix (riskScore >= 0.4 links branches)
+ *   (c) optional manual override via branchOverrides[branch] = "GroupX"
+ * Returns: { groupId -> branches[] }, plus a reverse map branchToGroup.
+ */
+export function detectBranchGroups(
+  pool: any[],
+  branchOverrides: Record<string, string> = {}
+): { groups: Record<string, string[]>; branchToGroup: Record<string, string> } {
+  const similarity = buildBranchSimilarityMatrix(pool);
+  const branches = new Set<string>();
+  pool.forEach(s => {
+    const offs = getOfferings(s);
+    (offs.length ? offs.map(o => o.branch) : [String(s.branch || '')]).filter(Boolean).forEach(b => branches.add(b));
+  });
+
+  const parent: Record<string, string> = {};
+  const find = (x: string): string => parent[x] === x ? x : (parent[x] = find(parent[x]));
+  const union = (a: string, b: string) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb; };
+  branches.forEach(b => { parent[b] = b; });
+
+  const prefixOf = (b: string) => b.replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase() || b;
+  const byPrefix: Record<string, string[]> = {};
+  branches.forEach(b => { (byPrefix[prefixOf(b)] = byPrefix[prefixOf(b)] || []).push(b); });
+  Object.values(byPrefix).forEach(list => { for (let i = 1; i < list.length; i++) union(list[0], list[i]); });
+
+  // similarity-based merge
+  const arr = Array.from(branches);
+  for (let i = 0; i < arr.length; i++) for (let j = i + 1; j < arr.length; j++) {
+    const r = similarity[arr[i]]?.[arr[j]]?.riskScore || 0;
+    if (r >= 0.4) union(arr[i], arr[j]);
+  }
+
+  // manual override wins
+  Object.entries(branchOverrides).forEach(([b, g]) => {
+    if (!parent[b]) parent[b] = b;
+    // assign override group: make all branches with same override label union together
+    Object.entries(branchOverrides).forEach(([b2, g2]) => { if (g === g2 && b !== b2 && parent[b2]) union(b, b2); });
+  });
+
+  const groups: Record<string, string[]> = {};
+  branches.forEach(b => {
+    const root = find(b);
+    const label = branchOverrides[b] || `Group-${root}`;
+    (groups[label] = groups[label] || []).push(b);
+  });
+  const branchToGroup: Record<string, string> = {};
+  Object.entries(groups).forEach(([g, bs]) => bs.forEach(b => { branchToGroup[b] = g; }));
+  return { groups, branchToGroup };
+}
+
 export interface SubjectFamily {
   familyId: string;
   familyName: string;
