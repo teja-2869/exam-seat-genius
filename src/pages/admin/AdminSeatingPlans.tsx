@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import {
   ClipboardList, LayoutGrid, Download, Filter, Search, Activity, Calendar,
-  Monitor, MapPin, FileText, Users, Building2
+  Monitor, MapPin, FileText, Users, Building2, AlertTriangle, FileSpreadsheet
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -11,12 +11,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { db } from '@/lib/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { toast } from '@/hooks/use-toast';
+import {
+  buildStudentRegister, exportStudentRegisterPDF, exportStudentRegisterExcel,
+  exportRoomWiseRegisterPDF, exportBlockWiseRegisterPDF, exportBranchWiseRegisterPDF,
+  exportMasterRegisterPDF, exportMasterRegisterExcel,
+} from '@/lib/seatingRegisters';
 
 /**
  * Build a row-major matrix of benches from the flat `seats` array stored in Firestore.
