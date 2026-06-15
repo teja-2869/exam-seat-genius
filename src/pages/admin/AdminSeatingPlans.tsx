@@ -219,17 +219,47 @@ export default function AdminSeatingPlans() {
             <h1 className="text-2xl sm:text-3xl font-display font-bold mb-1">Seating Plans</h1>
             <p className="text-muted-foreground">Visualize and export generated seating arrangements.</p>
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button disabled={filteredPlans.length === 0}><Download className="w-4 h-4 mr-2" /> Export</Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onClick={exportStudentWise}><Users className="w-4 h-4 mr-2" /> Student-wise PDF</DropdownMenuItem>
-              <DropdownMenuItem onClick={exportInvigilator}><ClipboardList className="w-4 h-4 mr-2" /> Invigilator Sheet</DropdownMenuItem>
-              <DropdownMenuItem onClick={exportMaster}><FileText className="w-4 h-4 mr-2" /> Master Report</DropdownMenuItem>
-              {fBlock !== 'All' && <DropdownMenuItem onClick={() => exportBlockWise(fBlock)}><Building2 className="w-4 h-4 mr-2" /> Block {fBlock} PDF</DropdownMenuItem>}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setConflictsOpen(true)} disabled={filteredPlans.length === 0}>
+              <AlertTriangle className="w-4 h-4 mr-2" /> Conflicts
+              {(() => { const n = filteredPlans.reduce((a, p) => a + (p.conflictCount || 0), 0); return n > 0 ? <Badge className="ml-2 bg-red-100 text-red-700 hover:bg-red-100">{n}</Badge> : null; })()}
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button disabled={filteredPlans.length === 0}><Download className="w-4 h-4 mr-2" /> Export</Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuLabel>Registers (University format)</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => exportStudentRegisterPDF(buildStudentRegister(filteredPlans as any), { institutionName: (college as any)?.name || 'Institution', examName: activeSession?.examName || 'Exam' })}>
+                  <FileText className="w-4 h-4 mr-2" /> Student Seating Register (PDF)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportStudentRegisterExcel(buildStudentRegister(filteredPlans as any), { examName: activeSession?.examName || 'Exam' })}>
+                  <FileSpreadsheet className="w-4 h-4 mr-2" /> Student Register (Excel)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportRoomWiseRegisterPDF(filteredPlans as any, { institutionName: (college as any)?.name || 'Institution', examName: activeSession?.examName || 'Exam' })}>
+                  <LayoutGrid className="w-4 h-4 mr-2" /> Room-wise Register
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportBlockWiseRegisterPDF(filteredPlans as any, { institutionName: (college as any)?.name || 'Institution', examName: activeSession?.examName || 'Exam' })}>
+                  <Building2 className="w-4 h-4 mr-2" /> Block-wise Register
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportBranchWiseRegisterPDF(filteredPlans as any, { institutionName: (college as any)?.name || 'Institution', examName: activeSession?.examName || 'Exam' })}>
+                  <Users className="w-4 h-4 mr-2" /> Branch-wise Register
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportMasterRegisterPDF(filteredPlans as any, { institutionName: (college as any)?.name || 'Institution', examName: activeSession?.examName || 'Exam' })}>
+                  <FileText className="w-4 h-4 mr-2" /> Master Register (PDF)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportMasterRegisterExcel(filteredPlans as any, { examName: activeSession?.examName || 'Exam' })}>
+                  <FileSpreadsheet className="w-4 h-4 mr-2" /> Master Register (Excel)
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>Legacy</DropdownMenuLabel>
+                <DropdownMenuItem onClick={exportStudentWise}><Users className="w-4 h-4 mr-2" /> Student-wise PDF</DropdownMenuItem>
+                <DropdownMenuItem onClick={exportInvigilator}><ClipboardList className="w-4 h-4 mr-2" /> Invigilator Sheet</DropdownMenuItem>
+                <DropdownMenuItem onClick={exportMaster}><FileText className="w-4 h-4 mr-2" /> Master Report</DropdownMenuItem>
+                {fBlock !== 'All' && <DropdownMenuItem onClick={() => exportBlockWise(fBlock)}><Building2 className="w-4 h-4 mr-2" /> Block {fBlock} PDF</DropdownMenuItem>}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
         {/* Filters */}
