@@ -404,6 +404,39 @@ export default function AdminSeatingPlans() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Conflict Report Dialog */}
+      <Dialog open={conflictsOpen} onOpenChange={setConflictsOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-amber-600" /> Conflict Report</DialogTitle>
+          </DialogHeader>
+          <div className="overflow-auto">
+            {(() => {
+              const all = filteredPlans.flatMap(p => (p.conflicts || []).map((c: any) => ({ ...c, room: p.roomNumber, block: p.blockNumber, date: p.examDate, slot: p.examSlot })));
+              if (all.length === 0) return <div className="p-8 text-center text-emerald-700 bg-emerald-50 rounded-lg">No conflicts detected. ✔</div>;
+              return (
+                <table className="w-full text-sm border-collapse">
+                  <thead className="bg-muted/40 text-xs uppercase">
+                    <tr><th className="px-2 py-2 text-left">Type</th><th className="px-2 py-2 text-left">Date</th><th className="px-2 py-2 text-left">Slot</th><th className="px-2 py-2 text-left">Block</th><th className="px-2 py-2 text-left">Room</th><th className="px-2 py-2 text-left">Seat</th><th className="px-2 py-2 text-left">Roll A</th><th className="px-2 py-2 text-left">Roll B</th><th className="px-2 py-2 text-left">Subject</th></tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {all.map((c, i) => (
+                      <tr key={i} className="hover:bg-muted/20">
+                        <td className="px-2 py-1"><Badge className={`text-[10px] ${c.type === 'duplicate' ? 'bg-red-100 text-red-700' : c.type === 'adjacent' ? 'bg-amber-100 text-amber-700' : 'bg-yellow-100 text-yellow-700'}`}>{c.type}</Badge></td>
+                        <td className="px-2 py-1">{c.date}</td><td className="px-2 py-1">{c.slot}</td><td className="px-2 py-1">{c.block}</td><td className="px-2 py-1">{c.room}</td>
+                        <td className="px-2 py-1 font-mono text-xs">R{c.row}-C{c.col}</td>
+                        <td className="px-2 py-1 font-mono text-xs">{c.rollA}</td><td className="px-2 py-1 font-mono text-xs">{c.rollB}</td>
+                        <td className="px-2 py-1 font-mono text-xs">{c.subject}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              );
+            })()}
+          </div>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }
