@@ -22,6 +22,8 @@ const AdminDashboard: React.FC = () => {
     faculty: 0, hods: 0, branches: 0, exams: 0, capacity: 0,
     subjects: 0, theorySubjects: 0, labSubjects: 0, projectSubjects: 0,
     examSessions: 0, scheduledExams: 0, seatedExams: 0, seatingPlans: 0, studentsAllocated: 0, roomsUtilized: 0,
+    blocksUtilized: 0, totalConflicts: 0, avgOptScore: 0, avgQualityScore: 0,
+    recommendedDays: 0, actualDays: 0, utilizationPct: 0,
   });
   const [recentLogs, setRecentLogs] = useState<any[]>([]);
 
