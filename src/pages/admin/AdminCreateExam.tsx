@@ -13,9 +13,9 @@ import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
-import { Sparkles, Activity, BookOpen, Users, Layers, Calendar } from 'lucide-react';
-import { YEAR_LABELS, normYear, SLOT_TIMES } from '@/lib/examUtils';
-import { classifySubjects, buildBranchSimilarityMatrix, detectSubjectFamilies } from '@/lib/examOptimizer';
+import { Sparkles, Activity, BookOpen, Users, Layers, Calendar, Gauge, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { YEAR_LABELS, normYear, SLOT_TIMES, isUsableExamRoom } from '@/lib/examUtils';
+import { classifySubjects, buildBranchSimilarityMatrix, detectSubjectFamilies, durationBandForExamType, analyzeFeasibility, schedulingStrategyConfig, type SchedulingStrategy, type SeatingStrategy, type BranchSeparation } from '@/lib/examOptimizer';
 import { subjectOffers, getOfferings } from '@/lib/subjectUtils';
 
 const EXAM_TYPES = [
@@ -33,6 +33,7 @@ export default function AdminCreateExam() {
   const [branches, setBranches] = useState<any[]>([]);
   const [subjects, setSubjects] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
+  const [rooms, setRooms] = useState<any[]>([]);
 
   const [form, setForm] = useState({
     examName: '',
@@ -44,6 +45,11 @@ export default function AdminCreateExam() {
     branches: [] as string[],
     examCategory: 'Regular',
     selectedSubjectIds: [] as string[],
+    maxDurationDays: 7,
+    customDuration: false,
+    schedulingStrategy: 'AI_OPTIMIZED' as SchedulingStrategy,
+    seatingStrategy: 'BALANCED' as SeatingStrategy,
+    branchSeparation: 'BALANCED' as BranchSeparation,
     rules: {
       minGapDays: 1,
       maxPerDay: 2,
@@ -56,16 +62,26 @@ export default function AdminCreateExam() {
   useEffect(() => {
     if (!institutionId) return;
     (async () => {
-      const [brSnap, subSnap, stSnap] = await Promise.all([
+      const [brSnap, subSnap, stSnap, rmSnap] = await Promise.all([
         getDocs(query(collection(db, 'branches'), where('institutionId', '==', institutionId))),
         getDocs(query(collection(db, 'subjects'), where('institutionId', '==', institutionId))),
         getDocs(query(collection(db, 'students'), where('institutionId', '==', institutionId))),
+        getDocs(query(collection(db, 'classrooms'), where('institutionId', '==', institutionId))),
       ]);
       setBranches(brSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
       setSubjects(subSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter(s => !s.deleted && s.status !== 'Inactive'));
       setStudents(stSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
+      setRooms(rmSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter(r => isUsableExamRoom(r.roomType)));
     })();
   }, [institutionId]);
+
+  // Auto-set duration default whenever exam type changes (unless user chose custom).
+  useEffect(() => {
+    if (form.customDuration) return;
+    const band = durationBandForExamType(form.examType);
+    setForm(f => ({ ...f, maxDurationDays: band.def }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.examType]);
 
   // Filter subjects matching current selection (uses master catalog offeredTo[]).
   const matchingSubjects = useMemo(() => {
@@ -107,15 +123,45 @@ export default function AdminCreateExam() {
   // AI classification preview
   const aiPreview = useMemo(() => {
     const selected = subjects.filter(s => form.selectedSubjectIds.includes(s.id));
-    if (selected.length === 0) return { common: 0, core: 0, branchSpec: 0, lab: 0 };
-    const c = classifySubjects(selected, subjects);
+    if (selected.length === 0) return { common: 0, core: 0, branchSpec: 0, lab: 0, classifications: [] as any[], selectedRows: [] as any[] };
+    // Expand to per-(branch,year) rows so feasibility uses the same shape the scheduler will see.
+    const rows: any[] = [];
+    selected.forEach(s => {
+      const offs = getOfferings(s);
+      const yearSel = form.years.map(normYear);
+      const matched = offs.filter(o =>
+        (!form.branches.length || form.branches.includes(o.branch)) &&
+        (!form.semester || String(o.semester) === String(form.semester)) &&
+        (!yearSel.length || yearSel.includes(normYear(o.year)))
+      );
+      (matched.length ? matched : offs).forEach(o => {
+        rows.push({ id: s.id, subjectCode: s.subjectCode, subjectName: s.subjectName, branch: o.branch, year: normYear(o.year), semester: String(o.semester) });
+      });
+    });
+    const c = classifySubjects(rows, subjects);
     return {
       common: c.filter(x => x.classification === 'COMMON').length,
       core: c.filter(x => x.classification === 'CORE').length,
       branchSpec: c.filter(x => x.classification === 'BRANCH').length,
       lab: c.filter(x => x.classification === 'LAB').length,
+      classifications: c,
+      selectedRows: rows,
     };
-  }, [subjects, form.selectedSubjectIds]);
+  }, [subjects, form.selectedSubjectIds, form.branches, form.years, form.semester]);
+
+  // Feasibility report
+  const feasibility = useMemo(() => {
+    if (aiPreview.selectedRows.length === 0) return null;
+    return analyzeFeasibility({
+      selectedSubjects: aiPreview.selectedRows,
+      classifications: aiPreview.classifications,
+      totalStudents: metrics.totalStudents,
+      totalBranches: form.branches.length,
+      rooms,
+      requestedDays: form.maxDurationDays,
+      strategy: form.schedulingStrategy,
+    });
+  }, [aiPreview, metrics.totalStudents, form.branches.length, rooms, form.maxDurationDays, form.schedulingStrategy]);
 
   const toggleArr = (key: 'years' | 'branches' | 'selectedSubjectIds', v: string) => {
     const arr = form[key] as string[];
@@ -189,6 +235,16 @@ export default function AdminCreateExam() {
         commonSubjectCodes,
         subjectFamilies,
         rules: form.rules,
+        maxDurationDays: form.maxDurationDays,
+        schedulingStrategy: form.schedulingStrategy,
+        seatingStrategy: form.seatingStrategy,
+        branchSeparation: form.branchSeparation,
+        feasibility: feasibility ? {
+          status: feasibility.status,
+          recommendedDays: feasibility.recommendedDays,
+          totalCapacity: feasibility.totalCapacity,
+          notes: feasibility.notes,
+        } : null,
         totalStudents: metrics.totalStudents,
         totalSubjects: metrics.totalSubjects,
         totalDaysEstimated: metrics.estimatedDays,
@@ -385,6 +441,92 @@ export default function AdminCreateExam() {
                     <Switch checked={form.rules.allowParallel} onCheckedChange={v => setForm({ ...form, rules: { ...form.rules, allowParallel: v } })} />
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Section 4: Scheduling Constraints (AI Optimizer) */}
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Gauge className="w-5 h-5 text-primary" /> 4. Scheduling Constraints</CardTitle>
+                <CardDescription>Drives the AI scheduler and seating engine.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Maximum Duration</Label>
+                    <Select
+                      value={form.customDuration ? 'custom' : String(form.maxDurationDays)}
+                      onValueChange={v => {
+                        if (v === 'custom') setForm({ ...form, customDuration: true });
+                        else setForm({ ...form, customDuration: false, maxDurationDays: parseInt(v) });
+                      }}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="3">3 Days</SelectItem>
+                        <SelectItem value="5">5 Days</SelectItem>
+                        <SelectItem value="7">7 Days (Default)</SelectItem>
+                        <SelectItem value="10">10 Days</SelectItem>
+                        <SelectItem value="custom">Custom</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {form.customDuration && (
+                      <Input type="number" min={1} max={60} value={form.maxDurationDays}
+                        onChange={e => setForm({ ...form, maxDurationDays: parseInt(e.target.value) || 1 })} />
+                    )}
+                    <p className="text-[11px] text-muted-foreground">
+                      Recommended for {form.examType}: {durationBandForExamType(form.examType).min}–{durationBandForExamType(form.examType).max} days.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Scheduling Strategy</Label>
+                    <Select value={form.schedulingStrategy} onValueChange={v => setForm({ ...form, schedulingStrategy: v as SchedulingStrategy })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="AI_OPTIMIZED">AI Optimized (Default)</SelectItem>
+                        <SelectItem value="FAST">Fast Schedule</SelectItem>
+                        <SelectItem value="CONFLICT_MIN">Conflict Minimization</SelectItem>
+                        <SelectItem value="CAPACITY_OPT">Capacity Optimized</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Seating Strategy</Label>
+                    <Select value={form.seatingStrategy} onValueChange={v => setForm({ ...form, seatingStrategy: v as SeatingStrategy })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="STRICT">Strict (≤5% conflicts)</SelectItem>
+                        <SelectItem value="BALANCED">Balanced (Default)</SelectItem>
+                        <SelectItem value="CAPACITY_OPT">Capacity Optimized</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Branch Separation</Label>
+                    <Select value={form.branchSeparation} onValueChange={v => setForm({ ...form, branchSeparation: v as BranchSeparation })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="STRICT">Strict</SelectItem>
+                        <SelectItem value="BALANCED">Balanced (Default)</SelectItem>
+                        <SelectItem value="NONE">None</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {feasibility && (
+                  <div className={`rounded-lg border p-3 text-xs space-y-1 ${
+                    feasibility.status === 'FEASIBLE' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' :
+                    feasibility.status === 'TIGHT' ? 'bg-amber-50 border-amber-200 text-amber-800' :
+                    'bg-red-50 border-red-200 text-red-800'
+                  }`}>
+                    <div className="flex items-center gap-2 font-semibold">
+                      {feasibility.status === 'FEASIBLE' ? <ShieldCheck className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+                      Feasibility: {feasibility.status} — Recommended {feasibility.recommendedDays} day{feasibility.recommendedDays === 1 ? '' : 's'} • Capacity {feasibility.totalCapacity} seats
+                    </div>
+                    {feasibility.notes.map((n, i) => <div key={i} className="opacity-80">• {n}</div>)}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

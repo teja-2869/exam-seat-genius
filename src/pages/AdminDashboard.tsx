@@ -22,6 +22,8 @@ const AdminDashboard: React.FC = () => {
     faculty: 0, hods: 0, branches: 0, exams: 0, capacity: 0,
     subjects: 0, theorySubjects: 0, labSubjects: 0, projectSubjects: 0,
     examSessions: 0, scheduledExams: 0, seatedExams: 0, seatingPlans: 0, studentsAllocated: 0, roomsUtilized: 0,
+    blocksUtilized: 0, totalConflicts: 0, avgOptScore: 0, avgQualityScore: 0,
+    recommendedDays: 0, actualDays: 0, utilizationPct: 0,
   });
   const [recentLogs, setRecentLogs] = useState<any[]>([]);
 
@@ -74,12 +76,26 @@ const AdminDashboard: React.FC = () => {
         });
         const planSnap = await getDocs(query(collection(db, 'seatingPlans'), where('institutionId', '==', institutionId)));
         let studentsAllocated = 0;
+        let totalConflicts = 0;
+        let qualitySum = 0, qualityCount = 0;
         const usedRooms = new Set<string>();
+        const usedBlocks = new Set<string>();
         planSnap.docs.forEach(d => {
           const p = d.data() as any;
           studentsAllocated += p.occupiedSeats || 0;
           if (p.roomNumber) usedRooms.add(String(p.roomNumber));
+          if (p.blockNumber) usedBlocks.add(String(p.blockNumber));
+          totalConflicts += p.conflictCount || 0;
+          if (typeof p.seatingQualityScore === 'number') { qualitySum += p.seatingQualityScore; qualityCount++; }
         });
+        let optSum = 0, optCount = 0, recDaysSum = 0, actDaysSum = 0, durCount = 0;
+        sessSnap.docs.forEach(d => {
+          const s = d.data() as any;
+          if (typeof s.optimizationScore === 'number') { optSum += s.optimizationScore; optCount++; }
+          if (s.recommendedDays) { recDaysSum += s.recommendedDays; durCount++; }
+          if (s.actualDays) actDaysSum += s.actualDays;
+        });
+        const utilizationPct = seatCapacity > 0 ? Math.round((studentsAllocated / seatCapacity) * 100) : 0;
 
         setStats({
           blocks: blocksSnap.size, floors: floorsCount, classrooms: classCount,
@@ -88,6 +104,12 @@ const AdminDashboard: React.FC = () => {
           subjects: totalSubs, theorySubjects: theoryC, labSubjects: labC, projectSubjects: projC,
           examSessions: sessSnap.size, scheduledExams, seatedExams,
           seatingPlans: planSnap.size, studentsAllocated, roomsUtilized: usedRooms.size,
+          blocksUtilized: usedBlocks.size, totalConflicts,
+          avgOptScore: optCount ? Math.round(optSum / optCount) : 0,
+          avgQualityScore: qualityCount ? Math.round(qualitySum / qualityCount) : 0,
+          recommendedDays: durCount ? Math.round(recDaysSum / durCount) : 0,
+          actualDays: durCount ? Math.round(actDaysSum / durCount) : 0,
+          utilizationPct,
         });
 
         setRecentLogs([
@@ -138,6 +160,20 @@ const AdminDashboard: React.FC = () => {
                 <Card className="dashboard-card shadow-sm border-l-4 border-l-amber-500"><CardContent className="p-4"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1 block">Rooms Utilized</span><div className="flex items-center gap-3"><Building2 className="w-5 h-5 text-amber-500" /><span className="text-2xl font-bold">{stats.roomsUtilized}</span></div></CardContent></Card>
               </div>
             </div>
+
+            <div>
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 mt-4">Optimization Analytics</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                <Card className="dashboard-card shadow-sm border-l-4 border-l-emerald-500"><CardContent className="p-4"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1 block">Schedule Score</span><div className="flex items-center gap-3"><Activity className="w-5 h-5 text-emerald-500" /><span className="text-2xl font-bold">{stats.avgOptScore}<span className="text-sm text-muted-foreground">/100</span></span></div></CardContent></Card>
+                <Card className="dashboard-card shadow-sm border-l-4 border-l-blue-500"><CardContent className="p-4"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1 block">Seating Quality</span><div className="flex items-center gap-3"><Grid3X3 className="w-5 h-5 text-blue-500" /><span className="text-2xl font-bold">{stats.avgQualityScore}<span className="text-sm text-muted-foreground">/100</span></span></div></CardContent></Card>
+                <Card className="dashboard-card shadow-sm border-l-4 border-l-rose-500"><CardContent className="p-4"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1 block">Conflicts</span><div className="flex items-center gap-3"><AlertCircle className="w-5 h-5 text-rose-500" /><span className="text-2xl font-bold">{stats.totalConflicts}</span></div></CardContent></Card>
+                <Card className="dashboard-card shadow-sm border-l-4 border-l-amber-500"><CardContent className="p-4"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1 block">Room Utilization</span><div className="flex items-center gap-3"><Building2 className="w-5 h-5 text-amber-500" /><span className="text-2xl font-bold">{stats.utilizationPct}%</span></div></CardContent></Card>
+                <Card className="dashboard-card shadow-sm border-l-4 border-l-purple-500"><CardContent className="p-4"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1 block">Blocks Used</span><div className="flex items-center gap-3"><Server className="w-5 h-5 text-purple-500" /><span className="text-2xl font-bold">{stats.blocksUtilized}</span></div></CardContent></Card>
+                <Card className="dashboard-card shadow-sm border-l-4 border-l-cyan-500"><CardContent className="p-4"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1 block">Duration (Avg)</span><div className="flex items-center gap-3"><BookOpen className="w-5 h-5 text-cyan-500" /><span className="text-2xl font-bold">{stats.actualDays}<span className="text-sm text-muted-foreground">/{stats.recommendedDays || '—'}d</span></span></div></CardContent></Card>
+              </div>
+            </div>
+
+
 
 
 

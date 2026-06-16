@@ -14,7 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import { Calendar, Sparkles, Activity, Trash2, ArrowRight, BookOpen, CheckCircle2, Clock, Layers, Grid3x3, List, Download, Printer, FileSpreadsheet, FileText } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { SLOT_TIMES, normYear, addDays, todayPlus, isSunday, isUsableExamRoom } from '@/lib/examUtils';
-import { computeSeatingRisk, pickBenchMode, scoreSchedule, totalRoomCapacity, detectBranchGroups } from '@/lib/examOptimizer';
+import { computeSeatingRisk, pickBenchMode, scoreSchedule, totalRoomCapacity, detectBranchGroups, schedulingStrategyConfig, type SchedulingStrategy } from '@/lib/examOptimizer';
 import { buildTimetableMatrix, exportTimetablePDF, exportTimetableExcel, printTimetable } from '@/lib/scheduleExport';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -98,6 +98,9 @@ export default function AdminExamSchedule() {
       const subjects: any[] = activeSession.subjects || [];
       const classifications: any[] = activeSession.subjectClassifications || [];
       const similarity = activeSession.branchSimilarity || {};
+      const strategy: SchedulingStrategy = activeSession.schedulingStrategy || 'AI_OPTIMIZED';
+      const stratCfg = schedulingStrategyConfig(strategy);
+      const maxDurationDays: number = Math.max(1, parseInt(activeSession.maxDurationDays) || 7);
       // Auto-detect branch groups (Group-A: CSE/CSM/CSD, Group-B: ECE/EEE, ...).
       // Manual overrides come from branch docs (field: groupOverride).
       const branchOverrides: Record<string, string> = activeSession.branchGroupOverrides || {};
@@ -120,10 +123,12 @@ export default function AdminExamSchedule() {
       const dateSlotSubjects: Record<string, Set<string>> = {}; // `${date}|${slot}` -> subjectCodes
       // Track HIGH-risk branch groups already placed on a date to avoid grouping similar branches together.
       const dateHighRiskGroups: Record<string, Set<string>> = {};
-      const minGap = Math.max(0, parseInt(rules.minGapDays) || 0);
-      const maxPerDay = Math.max(1, parseInt(rules.maxPerDay) || 1);
-      const slots = ['Morning', 'Afternoon'];
+      // FAST strategy shrinks gap & raises per-day to meet the duration budget.
+      const minGap = strategy === 'FAST' ? 0 : Math.max(0, parseInt(rules.minGapDays) || 0);
+      const maxPerDay = strategy === 'FAST' ? Math.max(stratCfg.slotsPerDay, parseInt(rules.maxPerDay) || 1) : Math.max(1, parseInt(rules.maxPerDay) || 1);
+      const slots = stratCfg.slotsPerDay >= 3 ? ['Morning', 'Afternoon', 'Evening'] : ['Morning', 'Afternoon'];
       const startBase = todayPlus(3);
+      void maxDurationDays; // soft budget enforced post-commit via overrun warning
 
       const findSlot = (cohorts: string[], subjectCode: string, isHighRisk: boolean, primaryBranch: string): { date: string; slot: string } => {
         const subjectGroup = branchToGroup[primaryBranch] || primaryBranch;
@@ -227,12 +232,22 @@ export default function AdminExamSchedule() {
 
       await batch.commit();
       const optimizationScore = scoreSchedule(rowsForScore, similarity);
+      const uniqueDates = Array.from(new Set(rowsForScore.map(r => r.date))).sort();
+      const actualDays = uniqueDates.length;
+      const overran = actualDays > maxDurationDays;
       await updateDoc(doc(db, 'examSessions', selectedSessionId), {
         status: 'SCHEDULED',
         optimizationScore,
+        actualDays,
+        recommendedDays: activeSession.feasibility?.recommendedDays || actualDays,
+        durationOverrun: overran,
       });
 
-      toast({ title: 'Schedule generated', description: `${rowsToAdd.length} subjects • Optimization score ${optimizationScore}/100.` });
+      toast({
+        title: overran ? 'Schedule generated (over budget)' : 'Schedule generated',
+        description: `${rowsToAdd.length} subjects in ${actualDays}d (budget ${maxDurationDays}d) • Score ${optimizationScore}/100.`,
+        variant: overran ? 'destructive' : 'default',
+      });
     } catch (err: any) {
       console.error(err);
       toast({ title: 'Schedule generation failed', description: err.message, variant: 'destructive' });
