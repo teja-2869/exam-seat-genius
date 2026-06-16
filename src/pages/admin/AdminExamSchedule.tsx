@@ -14,7 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import { Calendar, Sparkles, Activity, Trash2, ArrowRight, BookOpen, CheckCircle2, Clock, Layers, Grid3x3, List, Download, Printer, FileSpreadsheet, FileText } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { SLOT_TIMES, normYear, addDays, todayPlus, isSunday, isUsableExamRoom } from '@/lib/examUtils';
-import { computeSeatingRisk, pickBenchMode, scoreSchedule, totalRoomCapacity, detectBranchGroups } from '@/lib/examOptimizer';
+import { computeSeatingRisk, pickBenchMode, scoreSchedule, totalRoomCapacity, detectBranchGroups, schedulingStrategyConfig, type SchedulingStrategy } from '@/lib/examOptimizer';
 import { buildTimetableMatrix, exportTimetablePDF, exportTimetableExcel, printTimetable } from '@/lib/scheduleExport';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
