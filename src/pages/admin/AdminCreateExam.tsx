@@ -13,9 +13,9 @@ import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
-import { Sparkles, Activity, BookOpen, Users, Layers, Calendar } from 'lucide-react';
-import { YEAR_LABELS, normYear, SLOT_TIMES } from '@/lib/examUtils';
-import { classifySubjects, buildBranchSimilarityMatrix, detectSubjectFamilies } from '@/lib/examOptimizer';
+import { Sparkles, Activity, BookOpen, Users, Layers, Calendar, Gauge, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { YEAR_LABELS, normYear, SLOT_TIMES, isUsableExamRoom } from '@/lib/examUtils';
+import { classifySubjects, buildBranchSimilarityMatrix, detectSubjectFamilies, durationBandForExamType, analyzeFeasibility, schedulingStrategyConfig, type SchedulingStrategy, type SeatingStrategy, type BranchSeparation } from '@/lib/examOptimizer';
 import { subjectOffers, getOfferings } from '@/lib/subjectUtils';
 
 const EXAM_TYPES = [
