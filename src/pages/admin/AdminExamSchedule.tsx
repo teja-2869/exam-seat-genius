@@ -98,6 +98,9 @@ export default function AdminExamSchedule() {
       const subjects: any[] = activeSession.subjects || [];
       const classifications: any[] = activeSession.subjectClassifications || [];
       const similarity = activeSession.branchSimilarity || {};
+      const strategy: SchedulingStrategy = activeSession.schedulingStrategy || 'AI_OPTIMIZED';
+      const stratCfg = schedulingStrategyConfig(strategy);
+      const maxDurationDays: number = Math.max(1, parseInt(activeSession.maxDurationDays) || 7);
       // Auto-detect branch groups (Group-A: CSE/CSM/CSD, Group-B: ECE/EEE, ...).
       // Manual overrides come from branch docs (field: groupOverride).
       const branchOverrides: Record<string, string> = activeSession.branchGroupOverrides || {};
@@ -120,10 +123,12 @@ export default function AdminExamSchedule() {
       const dateSlotSubjects: Record<string, Set<string>> = {}; // `${date}|${slot}` -> subjectCodes
       // Track HIGH-risk branch groups already placed on a date to avoid grouping similar branches together.
       const dateHighRiskGroups: Record<string, Set<string>> = {};
-      const minGap = Math.max(0, parseInt(rules.minGapDays) || 0);
-      const maxPerDay = Math.max(1, parseInt(rules.maxPerDay) || 1);
-      const slots = ['Morning', 'Afternoon'];
+      // FAST strategy shrinks gap & raises per-day to meet the duration budget.
+      const minGap = strategy === 'FAST' ? 0 : Math.max(0, parseInt(rules.minGapDays) || 0);
+      const maxPerDay = strategy === 'FAST' ? Math.max(stratCfg.slotsPerDay, parseInt(rules.maxPerDay) || 1) : Math.max(1, parseInt(rules.maxPerDay) || 1);
+      const slots = stratCfg.slotsPerDay >= 3 ? ['Morning', 'Afternoon', 'Evening'] : ['Morning', 'Afternoon'];
       const startBase = todayPlus(3);
+      const lastAllowedDate = addDays(startBase, maxDurationDays * 3); // soft cap window (accounting for skipped Sundays)
 
       const findSlot = (cohorts: string[], subjectCode: string, isHighRisk: boolean, primaryBranch: string): { date: string; slot: string } => {
         const subjectGroup = branchToGroup[primaryBranch] || primaryBranch;
