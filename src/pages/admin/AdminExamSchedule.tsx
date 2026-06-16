@@ -128,7 +128,7 @@ export default function AdminExamSchedule() {
       const maxPerDay = strategy === 'FAST' ? Math.max(stratCfg.slotsPerDay, parseInt(rules.maxPerDay) || 1) : Math.max(1, parseInt(rules.maxPerDay) || 1);
       const slots = stratCfg.slotsPerDay >= 3 ? ['Morning', 'Afternoon', 'Evening'] : ['Morning', 'Afternoon'];
       const startBase = todayPlus(3);
-      const lastAllowedDate = addDays(startBase, maxDurationDays * 3); // soft cap window (accounting for skipped Sundays)
+      void maxDurationDays; // soft budget enforced post-commit via overrun warning
 
       const findSlot = (cohorts: string[], subjectCode: string, isHighRisk: boolean, primaryBranch: string): { date: string; slot: string } => {
         const subjectGroup = branchToGroup[primaryBranch] || primaryBranch;
