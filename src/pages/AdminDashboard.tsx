@@ -161,6 +161,20 @@ const AdminDashboard: React.FC = () => {
               </div>
             </div>
 
+            <div>
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 mt-4">Optimization Analytics</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                <Card className="dashboard-card shadow-sm border-l-4 border-l-emerald-500"><CardContent className="p-4"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1 block">Schedule Score</span><div className="flex items-center gap-3"><Activity className="w-5 h-5 text-emerald-500" /><span className="text-2xl font-bold">{stats.avgOptScore}<span className="text-sm text-muted-foreground">/100</span></span></div></CardContent></Card>
+                <Card className="dashboard-card shadow-sm border-l-4 border-l-blue-500"><CardContent className="p-4"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1 block">Seating Quality</span><div className="flex items-center gap-3"><Grid3X3 className="w-5 h-5 text-blue-500" /><span className="text-2xl font-bold">{stats.avgQualityScore}<span className="text-sm text-muted-foreground">/100</span></span></div></CardContent></Card>
+                <Card className="dashboard-card shadow-sm border-l-4 border-l-rose-500"><CardContent className="p-4"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1 block">Conflicts</span><div className="flex items-center gap-3"><AlertCircle className="w-5 h-5 text-rose-500" /><span className="text-2xl font-bold">{stats.totalConflicts}</span></div></CardContent></Card>
+                <Card className="dashboard-card shadow-sm border-l-4 border-l-amber-500"><CardContent className="p-4"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1 block">Room Utilization</span><div className="flex items-center gap-3"><Building2 className="w-5 h-5 text-amber-500" /><span className="text-2xl font-bold">{stats.utilizationPct}%</span></div></CardContent></Card>
+                <Card className="dashboard-card shadow-sm border-l-4 border-l-purple-500"><CardContent className="p-4"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1 block">Blocks Used</span><div className="flex items-center gap-3"><Server className="w-5 h-5 text-purple-500" /><span className="text-2xl font-bold">{stats.blocksUtilized}</span></div></CardContent></Card>
+                <Card className="dashboard-card shadow-sm border-l-4 border-l-cyan-500"><CardContent className="p-4"><span className="text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1 block">Duration (Avg)</span><div className="flex items-center gap-3"><BookOpen className="w-5 h-5 text-cyan-500" /><span className="text-2xl font-bold">{stats.actualDays}<span className="text-sm text-muted-foreground">/{stats.recommendedDays || '—'}d</span></span></div></CardContent></Card>
+              </div>
+            </div>
+
+
+
 
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
