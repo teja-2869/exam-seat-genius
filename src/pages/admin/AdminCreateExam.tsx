@@ -62,16 +62,26 @@ export default function AdminCreateExam() {
   useEffect(() => {
     if (!institutionId) return;
     (async () => {
-      const [brSnap, subSnap, stSnap] = await Promise.all([
+      const [brSnap, subSnap, stSnap, rmSnap] = await Promise.all([
         getDocs(query(collection(db, 'branches'), where('institutionId', '==', institutionId))),
         getDocs(query(collection(db, 'subjects'), where('institutionId', '==', institutionId))),
         getDocs(query(collection(db, 'students'), where('institutionId', '==', institutionId))),
+        getDocs(query(collection(db, 'classrooms'), where('institutionId', '==', institutionId))),
       ]);
       setBranches(brSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
       setSubjects(subSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter(s => !s.deleted && s.status !== 'Inactive'));
       setStudents(stSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
+      setRooms(rmSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter(r => isUsableExamRoom(r.roomType)));
     })();
   }, [institutionId]);
+
+  // Auto-set duration default whenever exam type changes (unless user chose custom).
+  useEffect(() => {
+    if (form.customDuration) return;
+    const band = durationBandForExamType(form.examType);
+    setForm(f => ({ ...f, maxDurationDays: band.def }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.examType]);
 
   // Filter subjects matching current selection (uses master catalog offeredTo[]).
   const matchingSubjects = useMemo(() => {
