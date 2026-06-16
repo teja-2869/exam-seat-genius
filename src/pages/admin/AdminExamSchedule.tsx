@@ -232,12 +232,22 @@ export default function AdminExamSchedule() {
 
       await batch.commit();
       const optimizationScore = scoreSchedule(rowsForScore, similarity);
+      const uniqueDates = Array.from(new Set(rowsForScore.map(r => r.date))).sort();
+      const actualDays = uniqueDates.length;
+      const overran = actualDays > maxDurationDays;
       await updateDoc(doc(db, 'examSessions', selectedSessionId), {
         status: 'SCHEDULED',
         optimizationScore,
+        actualDays,
+        recommendedDays: activeSession.feasibility?.recommendedDays || actualDays,
+        durationOverrun: overran,
       });
 
-      toast({ title: 'Schedule generated', description: `${rowsToAdd.length} subjects • Optimization score ${optimizationScore}/100.` });
+      toast({
+        title: overran ? 'Schedule generated (over budget)' : 'Schedule generated',
+        description: `${rowsToAdd.length} subjects in ${actualDays}d (budget ${maxDurationDays}d) • Score ${optimizationScore}/100.`,
+        variant: overran ? 'destructive' : 'default',
+      });
     } catch (err: any) {
       console.error(err);
       toast({ title: 'Schedule generation failed', description: err.message, variant: 'destructive' });
