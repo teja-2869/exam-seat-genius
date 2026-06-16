@@ -76,12 +76,26 @@ const AdminDashboard: React.FC = () => {
         });
         const planSnap = await getDocs(query(collection(db, 'seatingPlans'), where('institutionId', '==', institutionId)));
         let studentsAllocated = 0;
+        let totalConflicts = 0;
+        let qualitySum = 0, qualityCount = 0;
         const usedRooms = new Set<string>();
+        const usedBlocks = new Set<string>();
         planSnap.docs.forEach(d => {
           const p = d.data() as any;
           studentsAllocated += p.occupiedSeats || 0;
           if (p.roomNumber) usedRooms.add(String(p.roomNumber));
+          if (p.blockNumber) usedBlocks.add(String(p.blockNumber));
+          totalConflicts += p.conflictCount || 0;
+          if (typeof p.seatingQualityScore === 'number') { qualitySum += p.seatingQualityScore; qualityCount++; }
         });
+        let optSum = 0, optCount = 0, recDaysSum = 0, actDaysSum = 0, durCount = 0;
+        sessSnap.docs.forEach(d => {
+          const s = d.data() as any;
+          if (typeof s.optimizationScore === 'number') { optSum += s.optimizationScore; optCount++; }
+          if (s.recommendedDays) { recDaysSum += s.recommendedDays; durCount++; }
+          if (s.actualDays) actDaysSum += s.actualDays;
+        });
+        const utilizationPct = seatCapacity > 0 ? Math.round((studentsAllocated / seatCapacity) * 100) : 0;
 
         setStats({
           blocks: blocksSnap.size, floors: floorsCount, classrooms: classCount,
@@ -90,6 +104,12 @@ const AdminDashboard: React.FC = () => {
           subjects: totalSubs, theorySubjects: theoryC, labSubjects: labC, projectSubjects: projC,
           examSessions: sessSnap.size, scheduledExams, seatedExams,
           seatingPlans: planSnap.size, studentsAllocated, roomsUtilized: usedRooms.size,
+          blocksUtilized: usedBlocks.size, totalConflicts,
+          avgOptScore: optCount ? Math.round(optSum / optCount) : 0,
+          avgQualityScore: qualityCount ? Math.round(qualitySum / qualityCount) : 0,
+          recommendedDays: durCount ? Math.round(recDaysSum / durCount) : 0,
+          actualDays: durCount ? Math.round(actDaysSum / durCount) : 0,
+          utilizationPct,
         });
 
         setRecentLogs([
