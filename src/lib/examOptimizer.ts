@@ -454,3 +454,127 @@ export function allocateRoomSeats(
   }
   return seats;
 }
+
+// ============================================================
+// PART: Scheduling + Seating strategies, feasibility analysis
+// ============================================================
+
+export type SchedulingStrategy = 'AI_OPTIMIZED' | 'FAST' | 'CONFLICT_MIN' | 'CAPACITY_OPT';
+export type SeatingStrategy = 'STRICT' | 'BALANCED' | 'CAPACITY_OPT';
+export type BranchSeparation = 'STRICT' | 'BALANCED' | 'NONE';
+
+/** Duration band by exam type — used by Create Exam to suggest defaults & bound the scheduler. */
+export function durationBandForExamType(examType: string): { min: number; max: number; def: number } {
+  const t = (examType || '').toLowerCase();
+  if (t.includes('mid')) return { min: 3, max: 5, def: 5 };
+  if (t.includes('internal')) return { min: 5, max: 7, def: 7 };
+  if (t.includes('supplementary')) return { min: 3, max: 5, def: 5 };
+  // Semester / Practical / Lab → up to 7 days, default 7
+  return { min: 3, max: 10, def: 7 };
+}
+
+/** Tuning knobs derived from the chosen scheduling strategy. */
+export function schedulingStrategyConfig(s: SchedulingStrategy) {
+  switch (s) {
+    case 'FAST':
+      return { slotsPerDay: 3, parallelOk: true, conflictWeight: 0.5, capacityWeight: 0.5, durationWeight: 1.5 };
+    case 'CONFLICT_MIN':
+      return { slotsPerDay: 2, parallelOk: false, conflictWeight: 2.0, capacityWeight: 0.6, durationWeight: 0.6 };
+    case 'CAPACITY_OPT':
+      return { slotsPerDay: 2, parallelOk: true, conflictWeight: 0.8, capacityWeight: 2.0, durationWeight: 0.8 };
+    case 'AI_OPTIMIZED':
+    default:
+      return { slotsPerDay: 2, parallelOk: false, conflictWeight: 1.0, capacityWeight: 1.0, durationWeight: 1.0 };
+  }
+}
+
+/** Tuning knobs derived from the chosen seating strategy. */
+export function seatingStrategyConfig(s: SeatingStrategy) {
+  switch (s) {
+    case 'STRICT':
+      return { checkerboard: true, forbidFrontBack: true, forbidDiagonal: true, targetConflictPct: 5 };
+    case 'CAPACITY_OPT':
+      return { checkerboard: false, forbidFrontBack: false, forbidDiagonal: false, targetConflictPct: 25 };
+    case 'BALANCED':
+    default:
+      return { checkerboard: false, forbidFrontBack: true, forbidDiagonal: false, targetConflictPct: 15 };
+  }
+}
+
+/** Heuristic recommendation for the minimum number of exam days needed. */
+export function recommendDuration(
+  subjects: any[],
+  classifications: any[],
+  slotsPerDay = 2
+): number {
+  if (!subjects?.length) return 1;
+  // group sessions per (date) need: per cohort (branch+year) we can host at most slotsPerDay/day
+  const cohortLoad: Record<string, number> = {};
+  subjects.forEach(s => {
+    const k = `${s.branch}|${s.year}`;
+    cohortLoad[k] = (cohortLoad[k] || 0) + 1;
+  });
+  const maxCohort = Math.max(...Object.values(cohortLoad), 1);
+  const baseDays = Math.ceil(maxCohort / slotsPerDay);
+  // Common subjects need their own day each (HIGH-risk one-per-day rule).
+  const highRiskCommon = classifications.filter(c => c.classification === 'COMMON').length;
+  return Math.max(baseDays, Math.ceil(highRiskCommon / 1) + 1);
+}
+
+export interface FeasibilityReport {
+  totalStudents: number;
+  totalSubjects: number;
+  totalBranches: number;
+  totalRooms: number;
+  totalCapacity: number;
+  commonSubjects: number;
+  recommendedDays: number;
+  requestedDays: number;
+  status: 'FEASIBLE' | 'TIGHT' | 'INFEASIBLE';
+  notes: string[];
+}
+
+export function analyzeFeasibility(input: {
+  selectedSubjects: any[];
+  classifications: any[];
+  totalStudents: number;
+  totalBranches: number;
+  rooms: any[];
+  requestedDays: number;
+  strategy?: SchedulingStrategy;
+}): FeasibilityReport {
+  const cfg = schedulingStrategyConfig(input.strategy || 'AI_OPTIMIZED');
+  const totalCapacity = totalRoomCapacity(input.rooms);
+  const recommendedDays = recommendDuration(input.selectedSubjects, input.classifications, cfg.slotsPerDay);
+  const notes: string[] = [];
+  let status: FeasibilityReport['status'] = 'FEASIBLE';
+
+  if (totalCapacity < input.totalStudents) {
+    status = 'INFEASIBLE';
+    notes.push(`Capacity (${totalCapacity}) is below total students (${input.totalStudents}).`);
+  } else if (totalCapacity < Math.ceil(input.totalStudents * 1.1)) {
+    status = 'TIGHT';
+    notes.push('Capacity headroom under 10%. Conflicts likely under STRICT seating.');
+  }
+  if (recommendedDays > input.requestedDays) {
+    status = status === 'INFEASIBLE' ? 'INFEASIBLE' : 'TIGHT';
+    notes.push(`Selected duration ${input.requestedDays}d is below recommended ${recommendedDays}d.`);
+  }
+  const common = input.classifications.filter(c => c.classification === 'COMMON').length;
+  if (common > input.requestedDays) {
+    status = 'TIGHT';
+    notes.push(`${common} common subjects but only ${input.requestedDays} days — one per day not possible.`);
+  }
+  return {
+    totalStudents: input.totalStudents,
+    totalSubjects: input.selectedSubjects.length,
+    totalBranches: input.totalBranches,
+    totalRooms: input.rooms.length,
+    totalCapacity,
+    commonSubjects: common,
+    recommendedDays,
+    requestedDays: input.requestedDays,
+    status,
+    notes,
+  };
+}
