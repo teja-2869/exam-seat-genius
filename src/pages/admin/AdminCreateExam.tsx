@@ -33,6 +33,7 @@ export default function AdminCreateExam() {
   const [branches, setBranches] = useState<any[]>([]);
   const [subjects, setSubjects] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
+  const [rooms, setRooms] = useState<any[]>([]);
 
   const [form, setForm] = useState({
     examName: '',
@@ -44,6 +45,11 @@ export default function AdminCreateExam() {
     branches: [] as string[],
     examCategory: 'Regular',
     selectedSubjectIds: [] as string[],
+    maxDurationDays: 7,
+    customDuration: false,
+    schedulingStrategy: 'AI_OPTIMIZED' as SchedulingStrategy,
+    seatingStrategy: 'BALANCED' as SeatingStrategy,
+    branchSeparation: 'BALANCED' as BranchSeparation,
     rules: {
       minGapDays: 1,
       maxPerDay: 2,
