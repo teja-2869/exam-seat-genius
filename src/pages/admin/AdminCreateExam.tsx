@@ -123,15 +123,45 @@ export default function AdminCreateExam() {
   // AI classification preview
   const aiPreview = useMemo(() => {
     const selected = subjects.filter(s => form.selectedSubjectIds.includes(s.id));
-    if (selected.length === 0) return { common: 0, core: 0, branchSpec: 0, lab: 0 };
-    const c = classifySubjects(selected, subjects);
+    if (selected.length === 0) return { common: 0, core: 0, branchSpec: 0, lab: 0, classifications: [] as any[], selectedRows: [] as any[] };
+    // Expand to per-(branch,year) rows so feasibility uses the same shape the scheduler will see.
+    const rows: any[] = [];
+    selected.forEach(s => {
+      const offs = getOfferings(s);
+      const yearSel = form.years.map(normYear);
+      const matched = offs.filter(o =>
+        (!form.branches.length || form.branches.includes(o.branch)) &&
+        (!form.semester || String(o.semester) === String(form.semester)) &&
+        (!yearSel.length || yearSel.includes(normYear(o.year)))
+      );
+      (matched.length ? matched : offs).forEach(o => {
+        rows.push({ id: s.id, subjectCode: s.subjectCode, subjectName: s.subjectName, branch: o.branch, year: normYear(o.year), semester: String(o.semester) });
+      });
+    });
+    const c = classifySubjects(rows, subjects);
     return {
       common: c.filter(x => x.classification === 'COMMON').length,
       core: c.filter(x => x.classification === 'CORE').length,
       branchSpec: c.filter(x => x.classification === 'BRANCH').length,
       lab: c.filter(x => x.classification === 'LAB').length,
+      classifications: c,
+      selectedRows: rows,
     };
-  }, [subjects, form.selectedSubjectIds]);
+  }, [subjects, form.selectedSubjectIds, form.branches, form.years, form.semester]);
+
+  // Feasibility report
+  const feasibility = useMemo(() => {
+    if (aiPreview.selectedRows.length === 0) return null;
+    return analyzeFeasibility({
+      selectedSubjects: aiPreview.selectedRows,
+      classifications: aiPreview.classifications,
+      totalStudents: metrics.totalStudents,
+      totalBranches: form.branches.length,
+      rooms,
+      requestedDays: form.maxDurationDays,
+      strategy: form.schedulingStrategy,
+    });
+  }, [aiPreview, metrics.totalStudents, form.branches.length, rooms, form.maxDurationDays, form.schedulingStrategy]);
 
   const toggleArr = (key: 'years' | 'branches' | 'selectedSubjectIds', v: string) => {
     const arr = form[key] as string[];
