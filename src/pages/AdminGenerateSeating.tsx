@@ -17,7 +17,7 @@ import {
 } from 'firebase/firestore';
 import { toast } from '@/hooks/use-toast';
 import { isUsableExamRoom, isLabRoom, roomCapacity, normYear } from '@/lib/examUtils';
-import { allocateRoomSeats, detectConflicts, scoreSeating } from '@/lib/examOptimizer';
+import { allocateRoomSeats, detectConflicts, scoreSeating, seatingStrategyConfig, type SeatingStrategy } from '@/lib/examOptimizer';
 
 // Recursively check for arrays directly containing arrays (Firestore rejects nested arrays).
 function hasNestedArray(value: any, insideArray = false): boolean {
