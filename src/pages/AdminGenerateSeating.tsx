@@ -162,11 +162,15 @@ export default function AdminGenerateSeating() {
         }
         console.log(`[SeatingAI] Slot ${sk} — Students Allocated:`, allSlotStudents.length);
 
-        // Slot-level seating mode: ONE_PER_BENCH if any HIGH-risk row exists; else from constraint
+        // Strategy presets from Create Exam — fall back to legacy constraint UI if absent.
+        const seatingStrategy: SeatingStrategy = (active.seatingStrategy as SeatingStrategy) || 'BALANCED';
+        const stratCfg = seatingStrategyConfig(seatingStrategy);
         const slotHasHighRisk = rowsInSlot.some(r => r.seatingRisk === 'HIGH' || r.mode === 'ONE_PER_BENCH');
         const slotMode: 'ONE_PER_BENCH' | 'TWO_PER_BENCH' =
-          slotHasHighRisk || constraints.seatsPerBench === 'one' ? 'ONE_PER_BENCH' : 'TWO_PER_BENCH';
-        const checkerboard = rowsInSlot.some(r =>
+          slotHasHighRisk || constraints.seatsPerBench === 'one' || seatingStrategy === 'STRICT'
+            ? 'ONE_PER_BENCH' : 'TWO_PER_BENCH';
+        // STRICT → always checkerboard for non-lab rooms; BALANCED/CAPACITY → only when HIGH-risk COMMON/CORE present.
+        const checkerboard = stratCfg.checkerboard || rowsInSlot.some(r =>
           r.seatingRisk === 'HIGH' && (r.classification === 'COMMON' || r.classification === 'CORE')
         );
 
