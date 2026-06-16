@@ -443,6 +443,92 @@ export default function AdminCreateExam() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Section 4: Scheduling Constraints (AI Optimizer) */}
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Gauge className="w-5 h-5 text-primary" /> 4. Scheduling Constraints</CardTitle>
+                <CardDescription>Drives the AI scheduler and seating engine.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Maximum Duration</Label>
+                    <Select
+                      value={form.customDuration ? 'custom' : String(form.maxDurationDays)}
+                      onValueChange={v => {
+                        if (v === 'custom') setForm({ ...form, customDuration: true });
+                        else setForm({ ...form, customDuration: false, maxDurationDays: parseInt(v) });
+                      }}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="3">3 Days</SelectItem>
+                        <SelectItem value="5">5 Days</SelectItem>
+                        <SelectItem value="7">7 Days (Default)</SelectItem>
+                        <SelectItem value="10">10 Days</SelectItem>
+                        <SelectItem value="custom">Custom</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {form.customDuration && (
+                      <Input type="number" min={1} max={60} value={form.maxDurationDays}
+                        onChange={e => setForm({ ...form, maxDurationDays: parseInt(e.target.value) || 1 })} />
+                    )}
+                    <p className="text-[11px] text-muted-foreground">
+                      Recommended for {form.examType}: {durationBandForExamType(form.examType).min}–{durationBandForExamType(form.examType).max} days.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Scheduling Strategy</Label>
+                    <Select value={form.schedulingStrategy} onValueChange={v => setForm({ ...form, schedulingStrategy: v as SchedulingStrategy })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="AI_OPTIMIZED">AI Optimized (Default)</SelectItem>
+                        <SelectItem value="FAST">Fast Schedule</SelectItem>
+                        <SelectItem value="CONFLICT_MIN">Conflict Minimization</SelectItem>
+                        <SelectItem value="CAPACITY_OPT">Capacity Optimized</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Seating Strategy</Label>
+                    <Select value={form.seatingStrategy} onValueChange={v => setForm({ ...form, seatingStrategy: v as SeatingStrategy })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="STRICT">Strict (≤5% conflicts)</SelectItem>
+                        <SelectItem value="BALANCED">Balanced (Default)</SelectItem>
+                        <SelectItem value="CAPACITY_OPT">Capacity Optimized</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Branch Separation</Label>
+                    <Select value={form.branchSeparation} onValueChange={v => setForm({ ...form, branchSeparation: v as BranchSeparation })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="STRICT">Strict</SelectItem>
+                        <SelectItem value="BALANCED">Balanced (Default)</SelectItem>
+                        <SelectItem value="NONE">None</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {feasibility && (
+                  <div className={`rounded-lg border p-3 text-xs space-y-1 ${
+                    feasibility.status === 'FEASIBLE' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' :
+                    feasibility.status === 'TIGHT' ? 'bg-amber-50 border-amber-200 text-amber-800' :
+                    'bg-red-50 border-red-200 text-red-800'
+                  }`}>
+                    <div className="flex items-center gap-2 font-semibold">
+                      {feasibility.status === 'FEASIBLE' ? <ShieldCheck className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+                      Feasibility: {feasibility.status} — Recommended {feasibility.recommendedDays} day{feasibility.recommendedDays === 1 ? '' : 's'} • Capacity {feasibility.totalCapacity} seats
+                    </div>
+                    {feasibility.notes.map((n, i) => <div key={i} className="opacity-80">• {n}</div>)}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
 
           {/* Sidebar: AI Summary */}
