@@ -396,7 +396,7 @@ export default function AdminBlocks() {
                                                 // Fetch rooms for all floors in this block concurrently or broadly
                                                 // As HODRooms is doing, we just fetch all rooms for this block and filter locally
                                                 const fetchAllBlockRooms = async () => {
-                                                    let instId = college?.id || (user as any)?.institutionId;
+                                                    const instId = college?.id || (user as any)?.institutionId;
                                                     if (!instId) return;
                                                     // In our old fetchRooms we limited by floor. Let's fetch all per block
                                                     const rQ = query(collection(db, 'classrooms'), where('institutionId', '==', instId), where('blockNumber', '==', block.blockNumber));

@@ -18,7 +18,7 @@ export const StudentSeatView: React.FC = () => {
 
     useEffect(() => {
         const fetchSeat = async () => {
-            let institutionId = college?.id || (user as any)?.institutionId;
+            const institutionId = college?.id || (user as any)?.institutionId;
             if (!institutionId || !user?.id) { setLoading(false); return; }
 
             try {
@@ -30,10 +30,10 @@ export const StudentSeatView: React.FC = () => {
                 let foundClassroomId = '';
                 let foundSeat: any = null;
 
-                for (let doc of planDocs.docs) {
+                for (const doc of planDocs.docs) {
                     const data = doc.data();
                     const plans: SeatingPlanLayout[] = data.seatingPlan || data.plan || [];
-                    for (let p of plans) {
+                    for (const p of plans) {
                         if (p.leftSeat?.studentId === user.id) {
                             foundPlan = plans; foundClassroomId = data.classroomId; foundSeat = p.leftSeat; break;
                         }

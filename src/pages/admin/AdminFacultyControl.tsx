@@ -31,7 +31,7 @@ export default function AdminFacultyControl() {
     });
 
     const fetchFaculty = async () => {
-        let institutionId = college?.id || (user as any)?.institutionId;
+        const institutionId = college?.id || (user as any)?.institutionId;
         if (!institutionId) { setLoading(false); return; }
         try {
             // Query faculty specifically bound to this institution
@@ -55,7 +55,7 @@ export default function AdminFacultyControl() {
     }, [college, user]);
 
     const handleCreateFaculty = async () => {
-        let institutionId = college?.id || (user as any)?.institutionId;
+        const institutionId = college?.id || (user as any)?.institutionId;
         if (!institutionId) return;
 
         try {

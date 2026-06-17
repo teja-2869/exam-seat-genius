@@ -68,6 +68,7 @@ export default function AdminCreateExam() {
 
   useEffect(() => {
      fetchData();
+     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [institutionId]);
 
   const handleCheckboxArray = (key: keyof typeof formData, value: string) => {

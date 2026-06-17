@@ -23,7 +23,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const raw = localStorage.getItem('userSession');
       if (raw) return JSON.parse(raw);
-    } catch {}
+    } catch (e) {
+      console.error("Failed parsing user session", e);
+    }
     return null;
   };
 

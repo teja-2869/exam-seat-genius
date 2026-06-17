@@ -33,7 +33,7 @@ export default function AdminStudentsControl() {
     const [isSaving, setIsSaving] = useState(false);
 
     const fetchFilters = async () => {
-        let institutionId = college?.id || (user as any)?.institutionId;
+        const institutionId = college?.id || (user as any)?.institutionId;
         if (!institutionId) return;
         try {
             const bQuery = query(collection(db, 'branches'), where('institutionId', '==', institutionId));
@@ -43,7 +43,7 @@ export default function AdminStudentsControl() {
     };
 
     const fetchStudents = async () => {
-        let institutionId = college?.id || (user as any)?.institutionId;
+        const institutionId = college?.id || (user as any)?.institutionId;
         if (!institutionId) { setLoading(false); return; }
         setLoading(true);
         try {
@@ -55,7 +55,7 @@ export default function AdminStudentsControl() {
             constraints.push(limit(300));
             const sQuery = query(collection(db, 'students'), ...constraints);
             const snap = await getDocs(sQuery);
-            let fetched = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+            const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
             fetched.sort((a, b) => String(a.rollNumber).localeCompare(String(b.rollNumber), undefined, { numeric: true }));
             setStudents(fetched);
         } catch (err) { console.error(err); } finally { setLoading(false); }
@@ -67,15 +67,15 @@ export default function AdminStudentsControl() {
     const toggleStudentStatus = async (studentId: string, currentStatus: string) => {
         if (datasetLocked) return;
         try {
-            let newStatus = currentStatus === 'Active' ? 'Detained' : 'Active';
+            const newStatus = currentStatus === 'Active' ? 'Detained' : 'Active';
             await updateDoc(doc(db, 'students', studentId), { academicStatus: newStatus });
             fetchStudents();
         } catch (err) { console.error(err); }
     };
 
     const filteredStudents = students.filter(s => {
-        let statusMatch = filterStatus === 'All' || s.academicStatus === filterStatus || s.status === filterStatus;
-        let searchMatch = s.name?.toLowerCase().includes(searchQuery.toLowerCase()) || s.rollNumber?.toLowerCase().includes(searchQuery.toLowerCase());
+        const statusMatch = filterStatus === 'All' || s.academicStatus === filterStatus || s.status === filterStatus;
+        const searchMatch = s.name?.toLowerCase().includes(searchQuery.toLowerCase()) || s.rollNumber?.toLowerCase().includes(searchQuery.toLowerCase());
         return statusMatch && searchMatch;
     });
 

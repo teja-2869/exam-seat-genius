@@ -25,7 +25,7 @@ const AdminDashboard: React.FC = () => {
 
   useEffect(() => {
     const fetchKPIs = async () => {
-      let institutionId = college?.id || (user as any)?.institutionId;
+      const institutionId = college?.id || (user as any)?.institutionId;
       if (!institutionId) { setLoading(false); return; }
 
       try {

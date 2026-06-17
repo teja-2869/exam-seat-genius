@@ -48,7 +48,7 @@ export default function HODDashboard() {
         const sSnap = await getDocs(sQ);
         const totalStudents = sSnap.size;
         
-        let yearsCount = { '1st Year': 0, '2nd Year': 0, '3rd Year': 0, '4th Year': 0 };
+        const yearsCount = { '1st Year': 0, '2nd Year': 0, '3rd Year': 0, '4th Year': 0 };
         sSnap.forEach(doc => {
             const y = doc.data().year;
             if (y && yearsCount[y as keyof typeof yearsCount] !== undefined) {
