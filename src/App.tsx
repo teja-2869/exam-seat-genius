@@ -27,6 +27,7 @@ import AdminInstitutionSettings from "./pages/admin/AdminInstitutionSettings";
 import AdminAccountSettings from "./pages/admin/AdminAccountSettings";
 import AdminAuditLogs from "./pages/admin/AdminAuditLogs";
 import AdminBulkImport from "./pages/admin/AdminBulkImport";
+import AdminSubjects from "./pages/admin/AdminSubjects";
 
 // HOD Pages
 import HODDashboard from "./pages/HODDashboard";
@@ -90,6 +91,7 @@ const App = () => (
             <Route path="/admin/branches" element={<ProtectedRoute allowedRoles={['admin', 'ADMIN']}><AdminBranches /></ProtectedRoute>} />
             <Route path="/admin/faculty" element={<ProtectedRoute allowedRoles={['admin', 'ADMIN']}><AdminFacultyControl /></ProtectedRoute>} />
             <Route path="/admin/students" element={<ProtectedRoute allowedRoles={['admin', 'ADMIN']}><AdminStudentsControl /></ProtectedRoute>} />
+            <Route path="/admin/subjects" element={<ProtectedRoute allowedRoles={['admin', 'ADMIN']}><AdminSubjects /></ProtectedRoute>} />
             <Route path="/admin/exams/create" element={<ProtectedRoute allowedRoles={['admin', 'ADMIN']}><AdminCreateExam /></ProtectedRoute>} />
             <Route path="/admin/exams/schedule" element={<ProtectedRoute allowedRoles={['admin', 'ADMIN']}><AdminExamSchedule /></ProtectedRoute>} />
             <Route path="/admin/exams/seating-plans" element={<ProtectedRoute allowedRoles={['admin', 'ADMIN']}><AdminSeatingPlans /></ProtectedRoute>} />

@@ -1,212 +1,379 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { AdminLayout } from '@/components/layout/AdminLayout';
-import { Sparkles, Activity, AlertCircle, FileDigit } from 'lucide-react';
+import { Sparkles, Activity, AlertCircle, Settings2, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { auth, functions, db } from '@/lib/firebase';
-import { httpsCallable } from 'firebase/functions';
-import { collection, query, where, getDocs, getDoc, doc, addDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
+import { db } from '@/lib/firebase';
+import {
+  collection, query, where, getDocs, addDoc, doc, updateDoc, writeBatch,
+  serverTimestamp, onSnapshot
+} from 'firebase/firestore';
+import { toast } from '@/hooks/use-toast';
+import { isUsableExamRoom, isLabRoom, roomCapacity, normYear } from '@/lib/examUtils';
+import { allocateRoomSeats, detectConflicts, scoreSeating, seatingStrategyConfig, type SeatingStrategy } from '@/lib/examOptimizer';
+
+// Recursively check for arrays directly containing arrays (Firestore rejects nested arrays).
+function hasNestedArray(value: any, insideArray = false): boolean {
+  if (Array.isArray(value)) {
+    if (insideArray) return true;
+    return value.some(v => hasNestedArray(v, true));
+  }
+  if (value && typeof value === 'object') {
+    return Object.values(value).some(v => hasNestedArray(v, false));
+  }
+  return false;
+}
 
 export default function AdminGenerateSeating() {
-    const { user, college } = useAuth();
-    const navigate = useNavigate();
-    const [exams, setExams] = useState<any[]>([]);
-    const [selectedExamId, setSelectedExamId] = useState('');
-    const [isGenerating, setIsGenerating] = useState(false);
-    const [status, setStatus] = useState({ text: '', type: 'idle' });
+  const { user, college } = useAuth();
+  const navigate = useNavigate();
+  const institutionId = college?.id || (user as any)?.institutionId;
 
-    const institutionId = college?.id || (user as any)?.institutionId;
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [selectedId, setSelectedId] = useState<string>('');
+  const [generating, setGenerating] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [statusMsg, setStatusMsg] = useState('');
+  const [constraints, setConstraints] = useState({
+    seatsPerBench: 'two', // 'one' or 'two'
+    branchSeparation: true,
+    yearSeparation: true,
+    suppSeparation: true,
+  });
 
-    useEffect(() => {
-        if (!institutionId) return;
-        const q = query(
-            collection(db, 'exams'), 
-            where('institutionId', '==', institutionId),
-            where('status', '==', 'CREATED') // Only fetch exams needing generation
-        );
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
-            fetched.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
-            setExams(fetched);
-            if (fetched.length > 0 && !selectedExamId) {
-                setSelectedExamId(fetched[0].id);
-            }
-        });
-        return () => unsubscribe();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [institutionId]);
-
-    const fallbackMockService = async (examId: string, instId: string) => {
-        console.warn("Falling back to local mock data service logic due to cloud failure.");
-        const examDoc = await getDoc(doc(db, 'exams', examId));
-        const exam = examDoc.data() as any;
-
-        const sQuery = query(collection(db, 'students'), where('institutionId', '==', instId));
-        const sSnap = await getDocs(sQuery);
-        const students = sSnap.docs.map(d => d.data()).filter(s => {
-            if (exam.targetYears?.length > 0 && !exam.targetYears.includes(s.year || '1st Year')) return false;
-            // skipping other complex rule filters for the mock fallback implementation constraint
-            return true;
-        });
-
-        const rQuery = query(collection(db, 'classrooms'), where('institutionId', '==', instId));
-        const rSnap = await getDocs(rQuery);
-        let rooms = rSnap.docs.map(d => d.data());
-        
-        // Filter rooms to matching blocks
-        if (exam.selectedBlocks?.length > 0) {
-            rooms = rooms.filter(r => exam.selectedBlocks.includes(r.blockNumber));
-        }
-
-        let studentIdx = 0;
-        for (const room of rooms) {
-            if (studentIdx >= students.length) break;
-            
-            const rType = (room.roomType || 'classroom').toLowerCase();
-            const isLab = rType === 'lab';
-            const rows = parseInt(room.rowsOfBenches, 10) || 5;
-            const cols = parseInt(room.columnsOfBenches, 10) || 5;
-            const matrix = [];
-
-            for (let i = 0; i < rows; i++) {
-                const rowArr = [];
-                for (let j = 0; j < cols; j++) {
-                    const seat1 = studentIdx < students.length ? students[studentIdx++] : null;
-                    const seat2 = !isLab && studentIdx < students.length ? students[studentIdx++] : null;
-                    rowArr.push({ seat1, seat2 });
-                }
-                matrix.push(rowArr);
-            }
-
-            await addDoc(collection(db, 'seatingPlans'), {
-                examId,
-                roomId: room.roomNumber,
-                blockNumber: room.blockNumber,
-                floorNumber: room.floorNumber,
-                seatingMatrix: matrix,
-                institutionId: instId,
-                createdAt: serverTimestamp()
-            });
-        }
-    };
-
-    const handleGenerate = async () => {
-        if (!selectedExamId || !institutionId) return;
-        setIsGenerating(true);
-        setStatus({ text: 'Initializing Cloud Operations Engine...', type: 'processing' });
-
-        try {
-            // Initiate strictly scoped Cloud Trigger
-            const generateFunction = httpsCallable(functions, 'generateSeatingPlan');
-            const res: any = await generateFunction({ examId: selectedExamId, institutionId });
-            
-            if (!res.data?.success) {
-                setStatus({ text: 'Cloud processing failed payload test. Initializing fallback override...', type: 'warning' });
-                throw new Error("Trigger executed implicitly false format.");
-            }
-        } catch (error) {
-            console.error("AI Generation execution threw an alert boundary. Entering safe MockData Service Fallback.", error);
-            setStatus({ text: 'Primary Cloud compute bound failed. Resolving via Local Engine Sequence...', type: 'warning' });
-            
-            try {
-                // Failsafe sequence natively required.
-                await fallbackMockService(selectedExamId, institutionId);
-            } catch (fallbackError) {
-                console.error("Critical core failure.", fallbackError);
-                setStatus({ text: 'Absolute engine failure. Could not trace AI paths nor Fallbacks locally.', type: 'error' });
-                setIsGenerating(false);
-                return;
-            }
-        }
-
-        setStatus({ text: 'Generation Successful! Relaying context pointers...', type: 'success' });
-        setTimeout(() => {
-            navigate('/admin/exams/seating-plans');
-        }, 1500);
-    };
-
-    return (
-        <AdminLayout>
-            <div className="max-w-4xl mx-auto space-y-8 animate-fade-in pb-12 mt-8">
-                <div className="mb-6">
-                    <div className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
-                        <span>Admin</span><span>/</span><span>Exams</span><span>/</span><span className="text-foreground font-medium">Generate Seating AI</span>
-                    </div>
-                    <h1 className="text-3xl font-display font-bold text-foreground mb-2 flex items-center gap-3">
-                        <Sparkles className="w-8 h-8 text-primary" />
-                        AI Seating Generator
-                    </h1>
-                    <p className="text-muted-foreground">
-                        Securely deploy autonomous seating allocations offloaded to the Firebase isolated compute pipeline.
-                    </p>
-                </div>
-
-                <Card className="border-none shadow-sm h-fit shadow-md">
-                    <CardHeader className="bg-primary/5 border-b rounded-t-xl">
-                        <CardTitle className="flex items-center gap-2 text-primary">
-                            <FileDigit className="w-5 h-5" /> Target Initialization
-                        </CardTitle>
-                        <CardDescription>Select the pending examination parameter structure to process.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="pt-6 space-y-6">
-                        <div className="space-y-2">
-                            <label className="text-sm font-semibold text-gray-700">Exam Binding Hook</label>
-                            <Select value={selectedExamId} onValueChange={setSelectedExamId} disabled={isGenerating}>
-                                <SelectTrigger className="w-full text-base py-6 bg-white border-2">
-                                    <SelectValue placeholder="Select queued exam to process..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {exams.length === 0 ? (
-                                        <SelectItem value="All" disabled>No Exams Pending Generation</SelectItem>
-                                    ) : (
-                                        exams.map(e => (
-                                            <SelectItem key={e.id} value={e.id}>
-                                                {e.examName} ({e.subject}) — {e.date}
-                                            </SelectItem>
-                                        ))
-                                    )}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        
-                        {status.text && (
-                            <div className={`p-4 rounded-lg flex items-center gap-3 border ${
-                                status.type === 'error' ? 'bg-red-50 text-red-700 border-red-200' :
-                                status.type === 'warning' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                                status.type === 'success' ? 'bg-green-50 text-green-700 border-green-200' :
-                                'bg-blue-50 text-blue-700 border-blue-200'
-                            }`}>
-                                {status.type === 'processing' && <Activity className="w-5 h-5 animate-spin" />}
-                                {status.type === 'error' && <AlertCircle className="w-5 h-5" />}
-                                <span className="text-sm font-medium">{status.text}</span>
-                            </div>
-                        )}
-
-                        <Button 
-                            onClick={handleGenerate} 
-                            disabled={isGenerating || !selectedExamId || exams.length === 0} 
-                            className="w-full py-6 text-lg tracking-wide rounded-xl shadow-md transition-all hover:scale-[1.01]"
-                        >
-                            {isGenerating ? 'Computing Matrix Array...' : 'Process Seating Generation'}
-                        </Button>
-                    </CardContent>
-                </Card>
-                
-                <Card className="border-none bg-muted/30 shadow-sm mt-6">
-                    <CardContent className="p-6 text-sm text-muted-foreground flex items-center gap-4">
-                        <div className="bg-primary/10 p-3 rounded-full text-primary shrink-0">
-                            <Sparkles className="w-5 h-5" />
-                        </div>
-                        <div>
-                            <strong className="block text-gray-800 mb-1">Server Isolation Executed</strong>
-                            Raw Gemini logic parsing matrices locally have been structurally transferred onto serverless Firebase Functions preventing frontend client API scraping. Failsafes actively wrap around standard iteration timeouts.
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-        </AdminLayout>
+  useEffect(() => {
+    if (!institutionId) return;
+    const unsub = onSnapshot(
+      query(collection(db, 'examSessions'),
+        where('institutionId', '==', institutionId),
+        where('status', 'in', ['SCHEDULED', 'SEATED'])),
+      snap => {
+        const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+        setSessions(data);
+        if (!selectedId && data.length > 0) setSelectedId(data[0].id);
+      }
     );
+    return () => unsub();
+  }, [institutionId]);
+
+  const active = useMemo(() => sessions.find(s => s.id === selectedId), [sessions, selectedId]);
+
+  /** Interleave students to avoid same-branch / same-year neighbours. */
+  const interleaveStudents = (students: any[]): any[] => {
+    const buckets: Record<string, any[]> = {};
+    students.forEach(s => {
+      const k = `${s.branch || 'UNK'}|${normYear(s.year)}`;
+      (buckets[k] = buckets[k] || []).push(s);
+    });
+    Object.values(buckets).forEach(arr => arr.sort((a, b) => String(a.rollNumber).localeCompare(String(b.rollNumber))));
+    const keys = Object.keys(buckets).sort((a, b) => buckets[b].length - buckets[a].length);
+    const out: any[] = [];
+    let safety = students.length + 50;
+    while (out.length < students.length && safety-- > 0) {
+      for (const k of keys) {
+        const arr = buckets[k];
+        if (arr.length === 0) continue;
+        out.push(arr.shift());
+        if (out.length >= students.length) break;
+      }
+    }
+    return out;
+  };
+
+  const handleGenerate = async () => {
+    if (!active) return;
+    setGenerating(true);
+    setProgress(0);
+    setStatusMsg('Loading rooms and students...');
+
+    try {
+      // Fetch rooms
+      const roomsSnap = await getDocs(query(collection(db, 'classrooms'), where('institutionId', '==', institutionId)));
+      const rooms = roomsSnap.docs
+        .map(d => ({ id: d.id, ...d.data() } as any))
+        .filter(r => isUsableExamRoom(r.roomType))
+        .sort((a, b) => {
+          // classrooms first, then labs
+          const aLab = isLabRoom(a.roomType) ? 1 : 0;
+          const bLab = isLabRoom(b.roomType) ? 1 : 0;
+          if (aLab !== bLab) return aLab - bLab;
+          return String(a.blockNumber || '').localeCompare(String(b.blockNumber || ''))
+            || String(a.roomNumber || '').localeCompare(String(b.roomNumber || ''));
+        });
+
+      console.log('[SeatingAI] Exam Selected:', { id: active.id, name: active.examName });
+      console.log('[SeatingAI] Rooms Selected:', rooms.length);
+      if (rooms.length === 0) throw new Error('No usable classrooms or labs available.');
+
+      // Fetch students
+      const stSnap = await getDocs(query(collection(db, 'students'), where('institutionId', '==', institutionId)));
+      const allStudents = stSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+
+      // Fetch schedule rows for this session
+      const schSnap = await getDocs(query(collection(db, 'examSchedule'),
+        where('institutionId', '==', institutionId),
+        where('sessionId', '==', selectedId)));
+      const scheduleRows = schSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+
+      // Clear previous seating plans for this session
+      const prev = await getDocs(query(collection(db, 'seatingPlans'),
+        where('institutionId', '==', institutionId),
+        where('sessionId', '==', selectedId)));
+      const clearBatch = writeBatch(db);
+      prev.docs.forEach(d => clearBatch.delete(d.ref));
+      await clearBatch.commit();
+
+      // Group schedule rows by (date, slot) — same-slot rows share room pool
+      const slotGroups: Record<string, any[]> = {};
+      scheduleRows.forEach(r => {
+        const k = `${r.date}|${r.slot}`;
+        (slotGroups[k] = slotGroups[k] || []).push(r);
+      });
+
+      const slotKeys = Object.keys(slotGroups).sort();
+      let processed = 0;
+      let totalAllocations = 0;
+      let totalDocsSaved = 0;
+      let totalConflicts = 0;
+      let totalQualitySum = 0;
+      let qualityRooms = 0;
+
+      for (const sk of slotKeys) {
+        const rowsInSlot = slotGroups[sk];
+        setStatusMsg(`Allocating ${sk}...`);
+
+        // Build student pool tagged with subject metadata
+        const allSlotStudents: any[] = [];
+        for (const row of rowsInSlot) {
+          const matches = allStudents.filter(st =>
+            row.branches.includes(st.branch)
+            && normYear(st.year) === normYear(row.year)
+            && (active.examCategory === 'Regular + Supplementary'
+              || active.examCategory === (st.examType || 'Regular'))
+          );
+          matches.forEach(m => allSlotStudents.push({ ...m, _subject: row }));
+        }
+        console.log(`[SeatingAI] Slot ${sk} — Students Allocated:`, allSlotStudents.length);
+
+        // Strategy presets from Create Exam — fall back to legacy constraint UI if absent.
+        const seatingStrategy: SeatingStrategy = (active.seatingStrategy as SeatingStrategy) || 'BALANCED';
+        const stratCfg = seatingStrategyConfig(seatingStrategy);
+        const slotHasHighRisk = rowsInSlot.some(r => r.seatingRisk === 'HIGH' || r.mode === 'ONE_PER_BENCH');
+        const slotMode: 'ONE_PER_BENCH' | 'TWO_PER_BENCH' =
+          slotHasHighRisk || constraints.seatsPerBench === 'one' || seatingStrategy === 'STRICT'
+            ? 'ONE_PER_BENCH' : 'TWO_PER_BENCH';
+        // STRICT → always checkerboard for non-lab rooms; BALANCED/CAPACITY → only when HIGH-risk COMMON/CORE present.
+        const checkerboard = stratCfg.checkerboard || rowsInSlot.some(r =>
+          r.seatingRisk === 'HIGH' && (r.classification === 'COMMON' || r.classification === 'CORE')
+        );
+
+        const pool = [...allSlotStudents]; // optimizer mutates
+        const batch = writeBatch(db);
+        let batchOps = 0;
+
+        for (const room of rooms) {
+          if (pool.length === 0) break;
+          const lab = isLabRoom(room.roomType);
+          const mode: 'ONE_PER_BENCH' | 'TWO_PER_BENCH' = lab ? 'ONE_PER_BENCH' : slotMode;
+          const rowsCount = parseInt(room.rowsOfBenches ?? room.rows, 10) || 5;
+          const colsCount = parseInt(room.columnsOfBenches ?? room.columns, 10) || 5;
+
+          const seats = allocateRoomSeats(room, pool, { mode, checkerboard: checkerboard && !lab });
+          if (seats.length === 0) continue;
+
+          const occupied = seats.length;
+          totalAllocations += occupied;
+
+          const conflicts = detectConflicts(seats);
+          totalConflicts += conflicts.length;
+          const totalSeatsForRoom = lab ? rowsCount * colsCount : (mode === 'ONE_PER_BENCH' ? rowsCount * colsCount : rowsCount * colsCount * 2);
+          const quality = scoreSeating(seats, totalSeatsForRoom);
+          totalQualitySum += quality;
+          qualityRooms++;
+
+          const planRef = doc(collection(db, 'seatingPlans'));
+          const planDoc: any = {
+            institutionId,
+            sessionId: selectedId,
+            sessionName: active.examName,
+            examId: selectedId,
+            examDate: rowsInSlot[0].date,
+            examSlot: rowsInSlot[0].slot,
+            startTime: rowsInSlot[0].startTime || '',
+            endTime: rowsInSlot[0].endTime || '',
+            scheduleIds: rowsInSlot.map(r => r.id),
+            roomId: room.roomNumber || room.id,
+            roomNumber: room.roomNumber || '',
+            blockNumber: room.blockNumber || '',
+            floorNumber: room.floorNumber ?? '',
+            roomType: lab ? 'lab' : 'classroom',
+            rows: rowsCount,
+            cols: colsCount,
+            capacity: totalSeatsForRoom,
+            allocatedCount: occupied,
+            seats,
+            occupiedSeats: occupied,
+            totalSeats: totalSeatsForRoom,
+            mode,
+            checkerboard: checkerboard && !lab,
+            seatingQualityScore: quality,
+            conflictCount: conflicts.length,
+            conflicts,
+            utilizationPct: totalSeatsForRoom > 0 ? Math.round((occupied / totalSeatsForRoom) * 100) : 0,
+            generatedAt: serverTimestamp(),
+            createdAt: serverTimestamp(),
+            generatedBy: (user as any)?.uid || (user as any)?.id || 'admin',
+            createdBy: (user as any)?.uid || (user as any)?.id || 'admin',
+          };
+
+          if (hasNestedArray(planDoc)) {
+            console.error('[SeatingAI] Nested array detected at', planRef.path);
+            throw new Error(`Nested array detected for room ${room.roomNumber}`);
+          }
+
+          try {
+            batch.set(planRef, planDoc);
+            batchOps++;
+          } catch (e: any) {
+            console.error('[SeatingAI] batch.set failed at', planRef.path, e);
+            throw e;
+          }
+        }
+        try {
+          await batch.commit();
+          totalDocsSaved += batchOps;
+          console.log(`[SeatingAI] Documents Saved (slot ${sk}):`, batchOps);
+        } catch (e: any) {
+          console.error('[SeatingAI] batch.commit failed for slot', sk, e);
+          throw e;
+        }
+        processed++;
+        setProgress(Math.round((processed / slotKeys.length) * 100));
+      }
+      const avgQuality = qualityRooms > 0 ? Math.round(totalQualitySum / qualityRooms) : 0;
+      console.log('[SeatingAI] Seats Generated:', totalAllocations, ' Documents Saved:', totalDocsSaved, ' Conflicts:', totalConflicts, ' Avg Quality:', avgQuality);
+
+      await updateDoc(doc(db, 'examSessions', selectedId), {
+        status: 'SEATED',
+        seatingQualityScore: avgQuality,
+        totalConflicts,
+      });
+
+      setStatusMsg(`Allocated ${totalAllocations} seats • Quality ${avgQuality}/100 • Conflicts ${totalConflicts}.`);
+      toast({ title: 'Seating generated', description: `${totalAllocations} seats • Quality ${avgQuality}/100 • ${totalConflicts} conflicts.` });
+      setTimeout(() => navigate('/admin/exams/seating-plans'), 1200);
+    } catch (err: any) {
+      console.error(err);
+      setStatusMsg(`Error: ${err.message}`);
+      toast({ title: 'Generation failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <AdminLayout>
+      <div className="max-w-5xl mx-auto space-y-6 animate-fade-in pb-12">
+        <div>
+          <div className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
+            <span>Admin</span><span>/</span><span>Exams</span><span>/</span><span className="text-foreground font-medium">Generate Seating</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-display font-bold mb-1 flex items-center gap-3">
+            <Sparkles className="w-7 h-7 text-primary" /> AI Seating Generator
+          </h1>
+          <p className="text-muted-foreground">Allocate students to rooms across every scheduled subject in one click.</p>
+        </div>
+
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle>1. Select Scheduled Exam</CardTitle>
+            <CardDescription>Only exams that have a generated schedule appear here.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Select value={selectedId} onValueChange={setSelectedId} disabled={generating}>
+              <SelectTrigger className="w-full"><SelectValue placeholder="Select exam session..." /></SelectTrigger>
+              <SelectContent>
+                {sessions.length === 0 ? (
+                  <div className="p-3 text-sm text-muted-foreground">No scheduled exams. Create and schedule one first.</div>
+                ) : sessions.map(s => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.examName} — {s.subjects?.length || 0} subjects
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {active && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Badge variant="secondary">{active.totalStudents || 0} students</Badge>
+                <Badge variant="outline">{active.subjects?.length || 0} subjects</Badge>
+                <Badge variant="outline">{active.branches?.length || 0} branches</Badge>
+                <Badge className={active.status === 'SEATED' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}>{active.status}</Badge>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><Settings2 className="w-5 h-5 text-primary" />2. Seating Constraints</CardTitle>
+            <CardDescription>Rules applied by the allocation engine.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>Seats per Bench (classrooms)</Label>
+              <Select value={constraints.seatsPerBench} onValueChange={v => setConstraints({ ...constraints, seatsPerBench: v })}>
+                <SelectTrigger className="w-full sm:w-72"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="one">One Student per Bench</SelectItem>
+                  <SelectItem value="two">Two Students per Bench</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <ToggleRow label="Branch Separation" value={constraints.branchSeparation} onChange={v => setConstraints({ ...constraints, branchSeparation: v })} />
+              <ToggleRow label="Year Separation" value={constraints.yearSeparation} onChange={v => setConstraints({ ...constraints, yearSeparation: v })} />
+              <ToggleRow label="Supplementary Separation" value={constraints.suppSeparation} onChange={v => setConstraints({ ...constraints, suppSeparation: v })} />
+            </div>
+            <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+              Engine auto-uses Classrooms + Labs. HOD rooms, faculty rooms, washrooms and stores are ignored.
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm">
+          <CardContent className="p-6 space-y-4">
+            <Button onClick={handleGenerate} disabled={!active || generating} className="w-full py-6 text-base">
+              {generating ? <><Activity className="w-5 h-5 mr-2 animate-spin" /> Allocating...</> : <><Sparkles className="w-5 h-5 mr-2" /> Generate Seating Plan</>}
+            </Button>
+            {generating && <Progress value={progress} className="h-2" />}
+            {statusMsg && (
+              <div className={`p-3 rounded-lg text-sm flex items-center gap-2 ${statusMsg.startsWith('Error') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>
+                {statusMsg.startsWith('Error') ? <AlertCircle className="w-4 h-4" /> : statusMsg.startsWith('Allocated') ? <CheckCircle2 className="w-4 h-4" /> : <Activity className="w-4 h-4 animate-spin" />}
+                {statusMsg}
+              </div>
+            )}
+            {active?.status === 'SEATED' && !generating && (
+              <Button variant="outline" className="w-full" onClick={() => navigate('/admin/exams/seating-plans')}>
+                View Seating Plans <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </AdminLayout>
+  );
 }
+
+const ToggleRow = ({ label, value, onChange }: any) => (
+  <div className="flex items-center justify-between border rounded-lg px-3 py-2">
+    <Label className="text-sm">{label}</Label>
+    <Switch checked={value} onCheckedChange={onChange} />
+  </div>
+);

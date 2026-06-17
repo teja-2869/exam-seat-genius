@@ -49,7 +49,7 @@ const Index = () => {
             </div>
             
             <h1 className="text-3xl sm:text-4xl md:text-6xl font-display font-bold text-foreground mb-4 sm:mb-6">
-              <span className="gradient-text">ExamSeat</span> Pro
+              <span className="gradient-text">ExamSeat Pro</span> — AI-Powered Examination Management
             </h1>
             
             <p className="text-base sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
@@ -75,7 +75,7 @@ const Index = () => {
               <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
                 <ShieldCheck className="w-7 h-7 text-primary" />
               </div>
-              <h3 className="font-display font-semibold text-lg mb-2">Secure Authentication</h3>
+              <h2 className="font-display font-semibold text-lg mb-2">Secure Authentication</h2>
               <p className="text-sm text-muted-foreground">
                 Role-based access with Firebase authentication for admins and HODs
               </p>
@@ -85,7 +85,7 @@ const Index = () => {
               <div className="w-14 h-14 rounded-2xl bg-secondary/10 flex items-center justify-center mx-auto mb-4">
                 <Sparkles className="w-7 h-7 text-secondary" />
               </div>
-              <h3 className="font-display font-semibold text-lg mb-2">AI Validation</h3>
+              <h2 className="font-display font-semibold text-lg mb-2">AI Validation</h2>
               <p className="text-sm text-muted-foreground">
                 Google Gemini validates seating to prevent same-branch students sitting adjacent
               </p>
@@ -95,7 +95,7 @@ const Index = () => {
               <div className="w-14 h-14 rounded-2xl bg-accent/10 flex items-center justify-center mx-auto mb-4">
                 <BookOpen className="w-7 h-7 text-accent" />
               </div>
-              <h3 className="font-display font-semibold text-lg mb-2">Visual Seat Finder</h3>
+              <h2 className="font-display font-semibold text-lg mb-2">Visual Seat Finder</h2>
               <p className="text-sm text-muted-foreground">
                 Students instantly locate their seats with color-coded classroom layouts
               </p>

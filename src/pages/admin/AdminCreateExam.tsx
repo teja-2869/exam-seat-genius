@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
-import { PlusCircle, Calendar as CalendarIcon, Activity } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,397 +8,578 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
-import { auth, db, functions } from '@/lib/firebase';
+import { Badge } from '@/components/ui/badge';
+import { db } from '@/lib/firebase';
 import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
 import { useNavigate } from 'react-router-dom';
+import { toast } from '@/hooks/use-toast';
+import { Sparkles, Activity, BookOpen, Users, Layers, Calendar, Gauge, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { YEAR_LABELS, normYear, SLOT_TIMES, isUsableExamRoom } from '@/lib/examUtils';
+import { classifySubjects, buildBranchSimilarityMatrix, detectSubjectFamilies, durationBandForExamType, analyzeFeasibility, schedulingStrategyConfig, type SchedulingStrategy, type SeatingStrategy, type BranchSeparation } from '@/lib/examOptimizer';
+import { subjectOffers, getOfferings } from '@/lib/subjectUtils';
+
+const EXAM_TYPES = [
+  'Internal Assessment', 'Mid Examination', 'Semester Examination',
+  'Supplementary Examination', 'Practical Examination', 'Lab Examination',
+];
+const EXAM_CATEGORIES = ['Regular', 'Supplementary', 'Regular + Supplementary'];
 
 export default function AdminCreateExam() {
   const { college, user } = useAuth();
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
-  const [exams, setExams] = useState<any[]>([]);
-  const [availableBranches, setAvailableBranches] = useState<any[]>([]);
-  const [availableBlocks, setAvailableBlocks] = useState<any[]>([]);
+  const institutionId = college?.id || (user as any)?.institutionId;
 
-  const [formData, setFormData] = useState({
-    // Basic Info
+  const [saving, setSaving] = useState(false);
+  const [branches, setBranches] = useState<any[]>([]);
+  const [subjects, setSubjects] = useState<any[]>([]);
+  const [students, setStudents] = useState<any[]>([]);
+  const [rooms, setRooms] = useState<any[]>([]);
+
+  const [form, setForm] = useState({
     examName: '',
-    subject: '',
-    examType: 'Internal',
-    date: '',
-    startTime: '',
-    endTime: '',
-    // Targeting
-    targetYears: [] as string[],
+    examType: 'Semester Examination',
+    academicYear: `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
+    semester: '1',
+    regulation: 'R23',
+    years: [] as string[],
     branches: [] as string[],
-    sections: [] as string[],
-    studentType: 'Regular',
-    // Infrastructure
-    selectedBlocks: [] as string[],
-    roomTypesAllowed: ['classroom', 'lab'],
-    excludeRoomTypes: [] as string[],
-    // Rules
-    noSameBranchAdjacent: true,
-    noSameSubjectAdjacent: true,
-    minRollGap: 1,
-    alternateSeating: false
+    examCategory: 'Regular',
+    selectedSubjectIds: [] as string[],
+    maxDurationDays: 7,
+    customDuration: false,
+    schedulingStrategy: 'AI_OPTIMIZED' as SchedulingStrategy,
+    seatingStrategy: 'BALANCED' as SeatingStrategy,
+    branchSeparation: 'BALANCED' as BranchSeparation,
+    rules: {
+      minGapDays: 1,
+      maxPerDay: 2,
+      includeSunday: false,
+      includeHolidays: false,
+      allowParallel: false,
+    },
   });
 
-  const hodObj = user as any;
-  const institutionId = college?.id || hodObj?.institutionId;
-
-  const fetchData = async () => {
+  useEffect(() => {
     if (!institutionId) return;
+    (async () => {
+      const [brSnap, subSnap, stSnap, rmSnap] = await Promise.all([
+        getDocs(query(collection(db, 'branches'), where('institutionId', '==', institutionId))),
+        getDocs(query(collection(db, 'subjects'), where('institutionId', '==', institutionId))),
+        getDocs(query(collection(db, 'students'), where('institutionId', '==', institutionId))),
+        getDocs(query(collection(db, 'classrooms'), where('institutionId', '==', institutionId))),
+      ]);
+      setBranches(brSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
+      setSubjects(subSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter(s => !s.deleted && s.status !== 'Inactive'));
+      setStudents(stSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
+      setRooms(rmSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter(r => isUsableExamRoom(r.roomType)));
+    })();
+  }, [institutionId]);
+
+  // Auto-set duration default whenever exam type changes (unless user chose custom).
+  useEffect(() => {
+    if (form.customDuration) return;
+    const band = durationBandForExamType(form.examType);
+    setForm(f => ({ ...f, maxDurationDays: band.def }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.examType]);
+
+  // Filter subjects matching current selection (uses master catalog offeredTo[]).
+  const matchingSubjects = useMemo(() => {
+    return subjects.filter(s => {
+      if (form.regulation && s.regulation && s.regulation !== form.regulation) return false;
+      const offs = getOfferings(s);
+      if (offs.length === 0) return false;
+      // Subject must offer at least one (branch, semester) the user picked.
+      const branchSel = form.branches.length ? form.branches : null;
+      const yearSel = form.years.length ? form.years.map(normYear) : null;
+      return offs.some(o => {
+        if (branchSel && !branchSel.includes(o.branch)) return false;
+        if (form.semester && String(o.semester) !== String(form.semester)) return false;
+        if (yearSel && !yearSel.includes(normYear(o.year))) return false;
+        return true;
+      });
+    });
+  }, [subjects, form.branches, form.years, form.semester, form.regulation]);
+
+  // Computed metrics
+  const metrics = useMemo(() => {
+    const matchingStudents = students.filter(st => {
+      if (form.branches.length && !form.branches.includes(st.branch)) return false;
+      if (form.years.length && !form.years.map(normYear).includes(normYear(st.year))) return false;
+      if (form.examCategory === 'Regular' && (st.examType || 'Regular') !== 'Regular') return false;
+      if (form.examCategory === 'Supplementary' && st.examType !== 'Supplementary') return false;
+      return true;
+    });
+    const subs = form.selectedSubjectIds.length;
+    const perDay = Math.max(1, form.rules.maxPerDay);
+    return {
+      totalStudents: matchingStudents.length,
+      totalSubjects: subs,
+      totalBranches: form.branches.length,
+      estimatedDays: Math.ceil(subs / perDay),
+    };
+  }, [students, form]);
+
+  // AI classification preview
+  const aiPreview = useMemo(() => {
+    const selected = subjects.filter(s => form.selectedSubjectIds.includes(s.id));
+    if (selected.length === 0) return { common: 0, core: 0, branchSpec: 0, lab: 0, classifications: [] as any[], selectedRows: [] as any[] };
+    // Expand to per-(branch,year) rows so feasibility uses the same shape the scheduler will see.
+    const rows: any[] = [];
+    selected.forEach(s => {
+      const offs = getOfferings(s);
+      const yearSel = form.years.map(normYear);
+      const matched = offs.filter(o =>
+        (!form.branches.length || form.branches.includes(o.branch)) &&
+        (!form.semester || String(o.semester) === String(form.semester)) &&
+        (!yearSel.length || yearSel.includes(normYear(o.year)))
+      );
+      (matched.length ? matched : offs).forEach(o => {
+        rows.push({ id: s.id, subjectCode: s.subjectCode, subjectName: s.subjectName, branch: o.branch, year: normYear(o.year), semester: String(o.semester) });
+      });
+    });
+    const c = classifySubjects(rows, subjects);
+    return {
+      common: c.filter(x => x.classification === 'COMMON').length,
+      core: c.filter(x => x.classification === 'CORE').length,
+      branchSpec: c.filter(x => x.classification === 'BRANCH').length,
+      lab: c.filter(x => x.classification === 'LAB').length,
+      classifications: c,
+      selectedRows: rows,
+    };
+  }, [subjects, form.selectedSubjectIds, form.branches, form.years, form.semester]);
+
+  // Feasibility report
+  const feasibility = useMemo(() => {
+    if (aiPreview.selectedRows.length === 0) return null;
+    return analyzeFeasibility({
+      selectedSubjects: aiPreview.selectedRows,
+      classifications: aiPreview.classifications,
+      totalStudents: metrics.totalStudents,
+      totalBranches: form.branches.length,
+      rooms,
+      requestedDays: form.maxDurationDays,
+      strategy: form.schedulingStrategy,
+    });
+  }, [aiPreview, metrics.totalStudents, form.branches.length, rooms, form.maxDurationDays, form.schedulingStrategy]);
+
+  const toggleArr = (key: 'years' | 'branches' | 'selectedSubjectIds', v: string) => {
+    const arr = form[key] as string[];
+    setForm({ ...form, [key]: arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v] });
+  };
+
+  const toggleAllSubjects = () => {
+    const allIds = matchingSubjects.map(s => s.id);
+    const allSelected = allIds.every(id => form.selectedSubjectIds.includes(id));
+    setForm({ ...form, selectedSubjectIds: allSelected ? form.selectedSubjectIds.filter(id => !allIds.includes(id)) : Array.from(new Set([...form.selectedSubjectIds, ...allIds])) });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!institutionId) return;
+    if (!form.examName.trim()) return toast({ title: 'Exam name required', variant: 'destructive' });
+    if (form.years.length === 0) return toast({ title: 'Select at least one year', variant: 'destructive' });
+    if (form.branches.length === 0) return toast({ title: 'Select at least one branch', variant: 'destructive' });
+    if (form.selectedSubjectIds.length === 0) return toast({ title: 'Select at least one subject', variant: 'destructive' });
+
+    setSaving(true);
     try {
-        const [eq, bq, blq] = await Promise.all([
-          getDocs(query(collection(db, 'exams'), where('institutionId', '==', institutionId))),
-          getDocs(query(collection(db, 'branches'), where('institutionId', '==', institutionId))),
-          getDocs(query(collection(db, 'blocks'), where('institutionId', '==', institutionId)))
-        ]);
-        
-        setExams(eq.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => new Date(b.createdAt?.toDate?.() || 0).getTime() - new Date(a.createdAt?.toDate?.() || 0).getTime()));
-        setAvailableBranches(bq.docs.map(d => ({ id: d.id, ...d.data() })));
-        setAvailableBlocks(blq.docs.map(d => ({ id: d.id, ...d.data() })));
-    } catch (err) {
-        console.error(err);
+      // Expand each selected master subject into one entry per (branch, semester)
+      // offering that matches the form's branch/year/semester selections.
+      const selectedSubjectsData: any[] = [];
+      subjects
+        .filter(s => form.selectedSubjectIds.includes(s.id))
+        .forEach(s => {
+          const offs = getOfferings(s);
+          const yearSel = form.years.map(normYear);
+          const matched = offs.filter(o =>
+            form.branches.includes(o.branch) &&
+            (!form.semester || String(o.semester) === String(form.semester)) &&
+            (yearSel.length === 0 || yearSel.includes(normYear(o.year)))
+          );
+          (matched.length ? matched : offs).forEach(o => {
+            selectedSubjectsData.push({
+              id: s.id,
+              subjectCode: s.subjectCode,
+              subjectName: s.subjectName,
+              branch: o.branch,
+              year: normYear(o.year),
+              semester: String(o.semester),
+              credits: s.credits || 0,
+            });
+          });
+        });
+
+      // AI: classify subjects and build branch similarity from full institution subject pool
+      const classifications = classifySubjects(selectedSubjectsData, subjects);
+      const branchSimilarity = buildBranchSimilarityMatrix(subjects.filter(s =>
+        getOfferings(s).some(o => form.branches.includes(o.branch))
+      ));
+      const commonSubjectCodes = Array.from(new Set(classifications.filter(c => c.classification === 'COMMON').map(c => c.subjectCode)));
+      const subjectFamilies = detectSubjectFamilies(selectedSubjectsData);
+
+      await addDoc(collection(db, 'examSessions'), {
+        institutionId,
+        examName: form.examName.trim(),
+        examType: form.examType,
+        academicYear: form.academicYear,
+        semester: form.semester,
+        regulation: form.regulation,
+        years: form.years.map(normYear),
+        branches: form.branches,
+        examCategory: form.examCategory,
+        subjectIds: form.selectedSubjectIds,
+        subjects: selectedSubjectsData,
+        subjectClassifications: classifications,
+        branchSimilarity,
+        commonSubjectCodes,
+        subjectFamilies,
+        rules: form.rules,
+        maxDurationDays: form.maxDurationDays,
+        schedulingStrategy: form.schedulingStrategy,
+        seatingStrategy: form.seatingStrategy,
+        branchSeparation: form.branchSeparation,
+        feasibility: feasibility ? {
+          status: feasibility.status,
+          recommendedDays: feasibility.recommendedDays,
+          totalCapacity: feasibility.totalCapacity,
+          notes: feasibility.notes,
+        } : null,
+        totalStudents: metrics.totalStudents,
+        totalSubjects: metrics.totalSubjects,
+        totalDaysEstimated: metrics.estimatedDays,
+        status: 'DRAFT',
+        createdBy: (user as any)?.uid || (user as any)?.id || 'admin',
+        createdAt: serverTimestamp(),
+      });
+
+      toast({ title: 'Exam created', description: `${form.examName} is ready to be scheduled.` });
+      navigate('/admin/exams/schedule');
+    } catch (err: any) {
+      console.error(err);
+      toast({ title: 'Failed to create exam', description: err.message, variant: 'destructive' });
+    } finally {
+      setSaving(false);
     }
   };
 
-  useEffect(() => {
-     fetchData();
-     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [institutionId]);
-
-  const handleCheckboxArray = (key: keyof typeof formData, value: string) => {
-      const arr = formData[key] as string[];
-      if (arr.includes(value)) {
-          setFormData({ ...formData, [key]: arr.filter(i => i !== value) });
-      } else {
-          setFormData({ ...formData, [key]: [...arr, value] });
-      }
-  };
-
-    const handleCreateExam = async (e: React.FormEvent) => {
-        e.preventDefault();
-        const userData = user as any;
-        if (!userData || !userData.role || !userData.institutionId) {
-            console.log("User data missing ❌");
-            return;
-        }
-        
-        // Ensure date/time valid
-        if (new Date(`${formData.date}T${formData.endTime}`) <= new Date(`${formData.date}T${formData.startTime}`)) {
-            alert("Validation Error: End time must be after start time.");
-            return;
-        }
-
-        setLoading(true);
-        try {
-            // Fetch matching students for validation & metrics
-            const sQuery = query(collection(db, 'students'), where('institutionId', '==', userData.institutionId));
-            const sSnap = await getDocs(sQuery);
-            const filteredStudents = sSnap.docs.map(d => d.data()).filter(s => {
-                if (formData.targetYears.length > 0 && !formData.targetYears.includes(s.year || '1st Year')) return false;
-                if (formData.branches.length > 0 && !formData.branches.includes(s.branch)) return false;
-                if (formData.sections.length > 0 && !formData.sections.includes(s.section)) return false;
-                if (formData.studentType !== 'Both' && formData.studentType !== (s.examType || 'Regular')) return false;
-                return true;
-            });
-
-            if (filteredStudents.length === 0) {
-                alert('Validation Error: No students match your targeting criteria.');
-                setLoading(false);
-                return;
-            }
-
-            // Fetch rooms and validate capacity
-            const cQuery = query(collection(db, 'classrooms'), where('institutionId', '==', userData.institutionId));
-            const cSnap = await getDocs(cQuery);
-            let maxCapacity = 0;
-            
-            cSnap.docs.forEach(docSnap => {
-                const r = docSnap.data();
-                if (formData.selectedBlocks.length > 0 && !formData.selectedBlocks.includes(r.blockNumber)) return;
-                
-                const rType = (r.roomType || 'classroom').toLowerCase();
-                if (!formData.roomTypesAllowed.includes(rType)) return;
-                if (formData.excludeRoomTypes.includes(rType)) return;
-                
-                const rows = parseInt(r.rowsOfBenches, 10) || 0;
-                const cols = parseInt(r.columnsOfBenches, 10) || 0;
-                // lab=1 per bench, classroom=2 per bench based on layout rendering logic
-                maxCapacity += (rType === 'lab') ? (rows * cols) : (rows * cols * 2);
-            });
-
-            if (maxCapacity < filteredStudents.length) {
-                alert(`Validation Error: Insufficient room capacity mapped. Mapped max capacity is ${maxCapacity}, but total matching students is ${filteredStudents.length}.`);
-                setLoading(false);
-                return;
-            }
-
-            const newExamRef = await addDoc(collection(db, 'exams'), {
-                institutionId: userData.institutionId,
-                examName: formData.examName,
-                subject: formData.subject,
-                examType: formData.examType,
-                date: formData.date,
-                startTime: formData.startTime,
-                endTime: formData.endTime,
-
-                targetYears: formData.targetYears,
-                branches: formData.branches,
-                sections: formData.sections,
-                studentType: formData.studentType,
-
-                selectedBlocks: formData.selectedBlocks,
-                roomTypesAllowed: formData.roomTypesAllowed,
-                excludeRoomTypes: formData.excludeRoomTypes,
-
-                noSameBranchAdjacent: formData.noSameBranchAdjacent,
-                noSameSubjectAdjacent: formData.noSameSubjectAdjacent,
-                minRollGap: formData.minRollGap,
-                alternateSeating: formData.alternateSeating,
-
-                totalStudents: filteredStudents.length,
-                status: "CREATED",
-                createdAt: serverTimestamp()
-            });
-
-            // Trigger mapping Cloud Function
-            try {
-                const generateSeatingPlan = httpsCallable(functions, 'generateSeatingPlan');
-                generateSeatingPlan({ examId: newExamRef.id }); // Background trigger without awaiting full resolution to maintain fast UI redirect
-            } catch (triggerErr) {
-                console.error("AI trigger failed to initiate:", triggerErr);
-            }
-
-            alert(`Exam "${formData.examName}" created successfully. Processing initiated for ${filteredStudents.length} students into ${maxCapacity} mapped seating capacities.`);
-            navigate('/admin/exams/schedule');
-        } catch (err: any) {
-            console.error(err);
-            alert(`Failed to create exam. Error: ${err.message}`);
-        } finally {
-            setLoading(false);
-        }
-    };
 
   return (
     <AdminLayout>
-      <div className="max-w-7xl mx-auto space-y-8 animate-fade-in pb-12">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                  <div className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
-                      <span>Admin</span><span>/</span><span>Exams</span><span>/</span><span className="text-foreground font-medium">Create Exam</span>
+      <div className="max-w-7xl mx-auto space-y-6 animate-fade-in pb-12">
+        <div>
+          <div className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
+            <span>Admin</span><span>/</span><span>Exams</span><span>/</span><span className="text-foreground font-medium">Create Exam</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-display font-bold mb-2">New Examination</h1>
+          <p className="text-muted-foreground">Define a multi-subject examination session for your institution.</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            {/* Section 1: Exam Information */}
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><BookOpen className="w-5 h-5 text-primary" /> 1. Exam Information</CardTitle>
+                <CardDescription>Core metadata about this examination.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Exam Name *</Label>
+                    <Input required placeholder="e.g., Sem-1 Regular Dec 2026" value={form.examName} onChange={e => setForm({ ...form, examName: e.target.value })} />
                   </div>
-                  <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground mb-2">
-                      New Exam Configuration
-                  </h1>
-                  <p className="text-muted-foreground">
-                      Define global examination parameters securely scoped to your institution.
-                  </p>
-              </div>
+                  <div className="space-y-2">
+                    <Label>Exam Type</Label>
+                    <Select value={form.examType} onValueChange={v => setForm({ ...form, examType: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>{EXAM_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Academic Year</Label>
+                    <Input value={form.academicYear} onChange={e => setForm({ ...form, academicYear: e.target.value })} placeholder="2026-2027" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Semester</Label>
+                    <Select value={form.semester} onValueChange={v => setForm({ ...form, semester: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>{['1','2','3','4','5','6','7','8'].map(s => <SelectItem key={s} value={s}>Semester {s}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Regulation</Label>
+                    <Input value={form.regulation} onChange={e => setForm({ ...form, regulation: e.target.value })} placeholder="R23" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Exam Category</Label>
+                    <Select value={form.examCategory} onValueChange={v => setForm({ ...form, examCategory: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>{EXAM_CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  <Label>Years Included *</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {YEAR_LABELS.map(y => (
+                      <label key={y} className="flex items-center gap-2 border px-3 py-1.5 rounded-md text-sm cursor-pointer hover:bg-muted/50">
+                        <Checkbox checked={form.years.includes(y)} onCheckedChange={() => toggleArr('years', y)} />
+                        <span>{y}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Branches Included *</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {branches.length === 0 && <span className="text-xs text-muted-foreground">No branches found. Create branches first.</span>}
+                    {branches.map((b: any) => {
+                      const name = b.branchName || b.name || b.branchCode;
+                      return (
+                        <label key={b.id} className="flex items-center gap-2 border px-3 py-1.5 rounded-md text-sm cursor-pointer hover:bg-muted/50">
+                          <Checkbox checked={form.branches.includes(name)} onCheckedChange={() => toggleArr('branches', name)} />
+                          <span>{name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Section 2: Subjects */}
+            <Card className="shadow-sm">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2"><Layers className="w-5 h-5 text-primary" /> 2. Subject Selection</CardTitle>
+                    <CardDescription>Auto-loaded from Subject Management. Filtered by branch / year / semester.</CardDescription>
+                  </div>
+                  {matchingSubjects.length > 0 && (
+                    <Button type="button" variant="outline" size="sm" onClick={toggleAllSubjects}>
+                      {matchingSubjects.every(s => form.selectedSubjectIds.includes(s.id)) ? 'Deselect All' : 'Select All'}
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {matchingSubjects.length === 0 ? (
+                  <div className="text-center py-10 text-sm text-muted-foreground border border-dashed rounded-lg">
+                    {form.branches.length === 0 || form.years.length === 0
+                      ? 'Select branches and years to load matching subjects.'
+                      : 'No subjects match this branch / year / semester / regulation combination.'}
+                  </div>
+                ) : (
+                  <div className="border rounded-lg overflow-hidden">
+                    <div className="overflow-x-auto max-h-96 overflow-y-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/40 text-xs uppercase text-muted-foreground sticky top-0">
+                          <tr>
+                            <th className="px-3 py-2 w-10"></th>
+                            <th className="px-3 py-2 text-left">Code</th>
+                            <th className="px-3 py-2 text-left">Subject</th>
+                            <th className="px-3 py-2 text-left">Branch</th>
+                            <th className="px-3 py-2 text-left">Year</th>
+                            <th className="px-3 py-2 text-left">Sem</th>
+                            <th className="px-3 py-2 text-left">Credits</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {matchingSubjects.map(s => (
+                            <tr key={s.id} className="hover:bg-muted/20">
+                              <td className="px-3 py-2">
+                                <Checkbox checked={form.selectedSubjectIds.includes(s.id)} onCheckedChange={() => toggleArr('selectedSubjectIds', s.id)} />
+                              </td>
+                              <td className="px-3 py-2 font-mono text-xs">{s.subjectCode}</td>
+                              <td className="px-3 py-2">{s.subjectName}</td>
+                              <td className="px-3 py-2">{s.branch}</td>
+                              <td className="px-3 py-2">{normYear(s.year)}</td>
+                              <td className="px-3 py-2">{s.semester}</td>
+                              <td className="px-3 py-2">{s.credits}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Section 3: Rules */}
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Calendar className="w-5 h-5 text-primary" /> 3. Examination Rules</CardTitle>
+                <CardDescription>Scheduling constraints applied during AI schedule generation.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Minimum Gap Between Exams (days)</Label>
+                    <Input type="number" min={0} max={7} value={form.rules.minGapDays}
+                      onChange={e => setForm({ ...form, rules: { ...form.rules, minGapDays: parseInt(e.target.value) || 0 } })} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Maximum Exams Per Day (per cohort)</Label>
+                    <Input type="number" min={1} max={5} value={form.rules.maxPerDay}
+                      onChange={e => setForm({ ...form, rules: { ...form.rules, maxPerDay: parseInt(e.target.value) || 1 } })} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+                  <div className="flex items-center justify-between border rounded-lg px-3 py-2">
+                    <Label className="text-sm">Include Sundays</Label>
+                    <Switch checked={form.rules.includeSunday} onCheckedChange={v => setForm({ ...form, rules: { ...form.rules, includeSunday: v } })} />
+                  </div>
+                  <div className="flex items-center justify-between border rounded-lg px-3 py-2">
+                    <Label className="text-sm">Include Holidays</Label>
+                    <Switch checked={form.rules.includeHolidays} onCheckedChange={v => setForm({ ...form, rules: { ...form.rules, includeHolidays: v } })} />
+                  </div>
+                  <div className="flex items-center justify-between border rounded-lg px-3 py-2">
+                    <Label className="text-sm">Allow Parallel Exams</Label>
+                    <Switch checked={form.rules.allowParallel} onCheckedChange={v => setForm({ ...form, rules: { ...form.rules, allowParallel: v } })} />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Section 4: Scheduling Constraints (AI Optimizer) */}
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Gauge className="w-5 h-5 text-primary" /> 4. Scheduling Constraints</CardTitle>
+                <CardDescription>Drives the AI scheduler and seating engine.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Maximum Duration</Label>
+                    <Select
+                      value={form.customDuration ? 'custom' : String(form.maxDurationDays)}
+                      onValueChange={v => {
+                        if (v === 'custom') setForm({ ...form, customDuration: true });
+                        else setForm({ ...form, customDuration: false, maxDurationDays: parseInt(v) });
+                      }}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="3">3 Days</SelectItem>
+                        <SelectItem value="5">5 Days</SelectItem>
+                        <SelectItem value="7">7 Days (Default)</SelectItem>
+                        <SelectItem value="10">10 Days</SelectItem>
+                        <SelectItem value="custom">Custom</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {form.customDuration && (
+                      <Input type="number" min={1} max={60} value={form.maxDurationDays}
+                        onChange={e => setForm({ ...form, maxDurationDays: parseInt(e.target.value) || 1 })} />
+                    )}
+                    <p className="text-[11px] text-muted-foreground">
+                      Recommended for {form.examType}: {durationBandForExamType(form.examType).min}–{durationBandForExamType(form.examType).max} days.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Scheduling Strategy</Label>
+                    <Select value={form.schedulingStrategy} onValueChange={v => setForm({ ...form, schedulingStrategy: v as SchedulingStrategy })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="AI_OPTIMIZED">AI Optimized (Default)</SelectItem>
+                        <SelectItem value="FAST">Fast Schedule</SelectItem>
+                        <SelectItem value="CONFLICT_MIN">Conflict Minimization</SelectItem>
+                        <SelectItem value="CAPACITY_OPT">Capacity Optimized</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Seating Strategy</Label>
+                    <Select value={form.seatingStrategy} onValueChange={v => setForm({ ...form, seatingStrategy: v as SeatingStrategy })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="STRICT">Strict (≤5% conflicts)</SelectItem>
+                        <SelectItem value="BALANCED">Balanced (Default)</SelectItem>
+                        <SelectItem value="CAPACITY_OPT">Capacity Optimized</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Branch Separation</Label>
+                    <Select value={form.branchSeparation} onValueChange={v => setForm({ ...form, branchSeparation: v as BranchSeparation })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="STRICT">Strict</SelectItem>
+                        <SelectItem value="BALANCED">Balanced (Default)</SelectItem>
+                        <SelectItem value="NONE">None</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {feasibility && (
+                  <div className={`rounded-lg border p-3 text-xs space-y-1 ${
+                    feasibility.status === 'FEASIBLE' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' :
+                    feasibility.status === 'TIGHT' ? 'bg-amber-50 border-amber-200 text-amber-800' :
+                    'bg-red-50 border-red-200 text-red-800'
+                  }`}>
+                    <div className="flex items-center gap-2 font-semibold">
+                      {feasibility.status === 'FEASIBLE' ? <ShieldCheck className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+                      Feasibility: {feasibility.status} — Recommended {feasibility.recommendedDays} day{feasibility.recommendedDays === 1 ? '' : 's'} • Capacity {feasibility.totalCapacity} seats
+                    </div>
+                    {feasibility.notes.map((n, i) => <div key={i} className="opacity-80">• {n}</div>)}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <Card className="border-none shadow-sm h-fit">
-                  <CardHeader>
-                      <CardTitle>Exam Parameters</CardTitle>
-                      <CardDescription>Enter the mandatory fields for the exam metadata.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                      <form onSubmit={handleCreateExam} className="space-y-8">
-                          
-                          {/* 1. Basic Info */}
-                          <div className="space-y-4">
-                              <h3 className="font-semibold text-lg border-b pb-2">1. Basic Info</h3>
-                              <div className="grid grid-cols-2 gap-4">
-                                  <div className="space-y-2">
-                                      <Label>Exam Name <span className="text-red-500">*</span></Label>
-                                      <Input required placeholder="e.g., Final Exam 2026" value={formData.examName} onChange={e => setFormData({ ...formData, examName: e.target.value })} />
-                                  </div>
-                                  <div className="space-y-2">
-                                      <Label>Subject <span className="text-red-500">*</span></Label>
-                                      <Input required placeholder="e.g., Advanced Mathematics" value={formData.subject} onChange={e => setFormData({ ...formData, subject: e.target.value })} />
-                                  </div>
-                              </div>
-                              <div className="grid grid-cols-2 gap-4">
-                                  <div className="space-y-2">
-                                      <Label>Exam Type <span className="text-red-500">*</span></Label>
-                                      <Select value={formData.examType} onValueChange={(val) => setFormData({ ...formData, examType: val })}>
-                                          <SelectTrigger><SelectValue placeholder="Select Type" /></SelectTrigger>
-                                          <SelectContent>
-                                              <SelectItem value="Internal">Internal</SelectItem>
-                                              <SelectItem value="External">External</SelectItem>
-                                              <SelectItem value="Mid">MidTerm</SelectItem>
-                                              <SelectItem value="Final">Final</SelectItem>
-                                          </SelectContent>
-                                      </Select>
-                                  </div>
-                                  <div className="space-y-2">
-                                      <Label>Date <span className="text-red-500">*</span></Label>
-                                      <Input required type="date" value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} />
-                                  </div>
-                              </div>
-                              <div className="grid grid-cols-2 gap-4">
-                                  <div className="space-y-2">
-                                      <Label>Start Time <span className="text-red-500">*</span></Label>
-                                      <Input required type="time" value={formData.startTime} onChange={e => setFormData({ ...formData, startTime: e.target.value })} />
-                                  </div>
-                                  <div className="space-y-2">
-                                      <Label>End Time <span className="text-red-500">*</span></Label>
-                                      <Input required type="time" value={formData.endTime} onChange={e => setFormData({ ...formData, endTime: e.target.value })} />
-                                  </div>
-                              </div>
-                          </div>
+          {/* Sidebar: AI Summary */}
+          <div className="space-y-6">
+            <Card className="shadow-sm sticky top-4">
+              <CardHeader className="bg-primary/5 border-b">
+                <CardTitle className="flex items-center gap-2 text-primary"><Sparkles className="w-5 h-5" /> AI Preparation Summary</CardTitle>
+                <CardDescription>Live calculation from your selections.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-6">
+                <MetricRow icon={<Users className="w-4 h-4" />} label="Total Students" value={metrics.totalStudents} />
+                <MetricRow icon={<BookOpen className="w-4 h-4" />} label="Total Subjects" value={metrics.totalSubjects} />
+                <MetricRow icon={<Layers className="w-4 h-4" />} label="Total Branches" value={metrics.totalBranches} />
+                <MetricRow icon={<Calendar className="w-4 h-4" />} label="Estimated Exam Days" value={metrics.estimatedDays} />
 
-                          {/* 2. Targeting */}
-                          <div className="space-y-4">
-                              <h3 className="font-semibold text-lg border-b pb-2">2. Student Targeting</h3>
-                              
-                              <div className="space-y-2">
-                                  <Label>Target Years</Label>
-                                  <div className="flex flex-wrap gap-4 mt-2">
-                                      {['1st Year', '2nd Year', '3rd Year', '4th Year'].map((yr) => (
-                                          <label key={yr} className="flex items-center space-x-2 border px-3 py-1.5 rounded-md text-sm cursor-pointer hover:bg-muted/50">
-                                              <Checkbox checked={formData.targetYears.includes(yr)} onCheckedChange={() => handleCheckboxArray('targetYears', yr)} />
-                                              <span>{yr}</span>
-                                          </label>
-                                      ))}
-                                  </div>
-                              </div>
-                              
-                              <div className="space-y-2">
-                                  <Label>Target Branches</Label>
-                                  <div className="flex flex-wrap gap-3 mt-2">
-                                      {availableBranches.map((b) => (
-                                          <label key={b.id} className="flex items-center space-x-2 border px-3 py-1.5 rounded-md text-sm cursor-pointer hover:bg-muted/50">
-                                              <Checkbox checked={formData.branches.includes(b.branchName)} onCheckedChange={() => handleCheckboxArray('branches', b.branchName)} />
-                                              <span>{b.branchName}</span>
-                                          </label>
-                                      ))}
-                                      {availableBranches.length === 0 && <span className="text-xs text-muted-foreground">No branches found.</span>}
-                                  </div>
-                              </div>
+                <div className="pt-3 border-t">
+                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">AI Subject Classification</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <Badge variant="outline" className="text-[10px]">Common: {aiPreview.common}</Badge>
+                    <Badge variant="outline" className="text-[10px]">Core: {aiPreview.core}</Badge>
+                    <Badge variant="outline" className="text-[10px]">Branch: {aiPreview.branchSpec}</Badge>
+                    <Badge variant="outline" className="text-[10px]">Lab: {aiPreview.lab}</Badge>
+                  </div>
+                </div>
 
-                              <div className="grid grid-cols-2 gap-4 pt-2">
-                                  <div className="space-y-2">
-                                      <Label>Specific Sections (Optional)</Label>
-                                      <Input placeholder="e.g. A, B (comma separated)" onChange={e => setFormData({...formData, sections: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} />
-                                  </div>
-                                  <div className="space-y-2">
-                                      <Label>Student Type</Label>
-                                      <Select value={formData.studentType} onValueChange={(val) => setFormData({ ...formData, studentType: val })}>
-                                          <SelectTrigger><SelectValue placeholder="Select Student Type" /></SelectTrigger>
-                                          <SelectContent>
-                                              <SelectItem value="Regular">Regular Only</SelectItem>
-                                              <SelectItem value="Supplementary">Supplementary Only</SelectItem>
-                                              <SelectItem value="Both">Both Regular + Supp</SelectItem>
-                                          </SelectContent>
-                                      </Select>
-                                  </div>
-                              </div>
-                          </div>
+                <div className="pt-4 border-t space-y-2">
+                  <div className="flex flex-wrap gap-1">
+                    {form.years.map(y => <Badge key={y} variant="secondary" className="text-[10px]">{y}</Badge>)}
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {form.branches.map(b => <Badge key={b} variant="outline" className="text-[10px]">{b}</Badge>)}
+                  </div>
+                </div>
 
-                          {/* 3. Infrastructure */}
-                          <div className="space-y-4">
-                              <h3 className="font-semibold text-lg border-b pb-2">3. Infrastructure Mapping</h3>
-                              
-                              <div className="space-y-2">
-                                  <Label>Allowed Blocks</Label>
-                                  <div className="flex flex-wrap gap-3 mt-2">
-                                      {availableBlocks.map((b) => (
-                                          <label key={b.id} className="flex items-center space-x-2 border px-3 py-1.5 rounded-md text-sm cursor-pointer hover:bg-muted/50">
-                                              <Checkbox checked={formData.selectedBlocks.includes(b.blockNumber)} onCheckedChange={() => handleCheckboxArray('selectedBlocks', b.blockNumber)} />
-                                              <span>{b.blockName || `Block ${b.blockNumber}`}</span>
-                                          </label>
-                                      ))}
-                                      {availableBlocks.length === 0 && <span className="text-xs text-muted-foreground">No blocks deployed.</span>}
-                                  </div>
-                              </div>
-
-                              <div className="space-y-2">
-                                  <Label>Room Types Allowed to Host Seating</Label>
-                                  <div className="flex flex-wrap gap-4 mt-2">
-                                      {['classroom', 'lab'].map((rt) => (
-                                          <label key={rt} className="flex items-center space-x-2 border px-3 py-1.5 rounded-md text-sm cursor-pointer hover:bg-muted/50 capitalize">
-                                              <Checkbox checked={formData.roomTypesAllowed.includes(rt)} onCheckedChange={() => handleCheckboxArray('roomTypesAllowed', rt)} />
-                                              <span>{rt}</span>
-                                          </label>
-                                      ))}
-                                  </div>
-                              </div>
-                              <div className="space-y-2">
-                                  <Label>Exclude Structural Types</Label>
-                                  <div className="flex flex-wrap gap-4 mt-2">
-                                      {['faculty room', 'hod room', 'washroom'].map((rt) => (
-                                          <label key={rt} className="flex items-center space-x-2 border px-3 py-1.5 rounded-md text-sm cursor-pointer hover:bg-muted/50 capitalize">
-                                              <Checkbox checked={formData.excludeRoomTypes.includes(rt)} onCheckedChange={() => handleCheckboxArray('excludeRoomTypes', rt)} />
-                                              <span>{rt}</span>
-                                          </label>
-                                      ))}
-                                  </div>
-                              </div>
-                          </div>
-
-                          {/* 4. Generation Rules */}
-                          <div className="space-y-4">
-                              <h3 className="font-semibold text-lg border-b pb-2">4. AI Seating Rules</h3>
-                              <div className="grid grid-cols-2 gap-6">
-                                  <div className="flex items-center justify-between">
-                                      <Label className="cursor-pointer" htmlFor="nba">No Same Branch Adjacent</Label>
-                                      <Switch id="nba" checked={formData.noSameBranchAdjacent} onCheckedChange={(c) => setFormData({ ...formData, noSameBranchAdjacent: c })} />
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                      <Label className="cursor-pointer" htmlFor="nsa">No Same Subject Adjacent</Label>
-                                      <Switch id="nsa" checked={formData.noSameSubjectAdjacent} onCheckedChange={(c) => setFormData({ ...formData, noSameSubjectAdjacent: c })} />
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                      <Label className="cursor-pointer" htmlFor="alt">Force Alternate Seating</Label>
-                                      <Switch id="alt" checked={formData.alternateSeating} onCheckedChange={(c) => setFormData({ ...formData, alternateSeating: c })} />
-                                  </div>
-                                  <div className="space-y-2">
-                                      <Label>Minimum Roll Gap</Label>
-                                      <Input type="number" min={1} max={10} value={formData.minRollGap} onChange={e => setFormData({ ...formData, minRollGap: parseInt(e.target.value)||1 })} />
-                                  </div>
-                              </div>
-                          </div>
-                          
-                          <Button type="submit" disabled={loading || !formData.date || !formData.examName || !formData.subject || formData.targetYears.length===0 || formData.branches.length===0} className="w-full mt-8 p-6 text-lg">
-                              {loading ? <><Activity className="w-5 h-5 mr-2 animate-spin" /> Preparing Sub-Engine Validation...</> : 'Initiate Engine Mapping & Create Exam'}
-                          </Button>
-                      </form>
-                  </CardContent>
-              </Card>
-
-              <Card className="border-none shadow-sm bg-muted/20">
-                  <CardHeader>
-                      <CardTitle>Recent Exams</CardTitle>
-                      <CardDescription>Exams previously configured.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                      {exams.length === 0 ? (
-                          <div className="py-8 text-center text-muted-foreground">
-                              No exams have been created yet.
-                          </div>
-                      ) : (
-                          <div className="space-y-4 overflow-y-auto max-h-[400px] pr-2 custom-scrollbar">
-                              {exams.map((exam, i) => (
-                                  <div key={i} className="flex flex-col bg-white p-4 rounded-xl shadow-sm border border-border group hover:border-primary transition-colors">
-                                      <div className="font-bold text-[#1a1c1e] text-lg">{exam.examName}</div>
-                                      <div className="text-muted-foreground font-medium text-sm mt-1">{exam.subject}</div>
-                                      <div className="flex items-center gap-2 mt-3 text-xs text-primary bg-primary/10 w-fit px-2 py-1 rounded-md">
-                                          <CalendarIcon className="w-3 h-3" />
-                                          {exam.date}
-                                      </div>
-                                  </div>
-                              ))}
-                          </div>
-                      )}
-                  </CardContent>
-              </Card>
+                <Button type="submit" disabled={saving} className="w-full mt-4">
+                  {saving ? <><Activity className="w-4 h-4 mr-2 animate-spin" /> Creating...</> : <>Create Exam <Sparkles className="w-4 h-4 ml-2" /></>}
+                </Button>
+                <p className="text-[11px] text-muted-foreground text-center">Saved as <strong>DRAFT</strong>. Generate the schedule in the next step.</p>
+              </CardContent>
+            </Card>
           </div>
+        </form>
       </div>
     </AdminLayout>
   );
 }
+
+const MetricRow = ({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) => (
+  <div className="flex items-center justify-between">
+    <div className="flex items-center gap-2 text-sm text-muted-foreground">{icon}{label}</div>
+    <div className="text-xl font-bold tabular-nums">{value}</div>
+  </div>
+);

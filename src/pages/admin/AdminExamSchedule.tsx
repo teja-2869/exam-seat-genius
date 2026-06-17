@@ -1,270 +1,506 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminLayout } from '@/components/layout/AdminLayout';
-import { Calendar, Search, Filter, Activity, Eye, Edit2, Trash2, ArrowUpDown } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, deleteDoc, doc, orderBy } from 'firebase/firestore';
-import { Badge } from '@/components/ui/badge';
+import {
+  collection, query, where, onSnapshot, getDocs, addDoc, writeBatch, doc,
+  deleteDoc, serverTimestamp, updateDoc
+} from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
+import { Calendar, Sparkles, Activity, Trash2, ArrowRight, BookOpen, CheckCircle2, Clock, Layers, Grid3x3, List, Download, Printer, FileSpreadsheet, FileText } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
+import { SLOT_TIMES, normYear, addDays, todayPlus, isSunday, isUsableExamRoom } from '@/lib/examUtils';
+import { computeSeatingRisk, pickBenchMode, scoreSchedule, totalRoomCapacity, detectBranchGroups, schedulingStrategyConfig, type SchedulingStrategy } from '@/lib/examOptimizer';
+import { buildTimetableMatrix, exportTimetablePDF, exportTimetableExcel, printTimetable } from '@/lib/scheduleExport';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 export default function AdminExamSchedule() {
-    const { user, college } = useAuth();
-    const navigate = useNavigate();
-    const [exams, setExams] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
+  const { user, college } = useAuth();
+  const navigate = useNavigate();
+  const institutionId = college?.id || (user as any)?.institutionId;
 
-    // Filters
-    const [searchTerm, setSearchTerm] = useState('');
-    const [filterDate, setFilterDate] = useState('');
-    const [filterStatus, setFilterStatus] = useState('All');
-    const [filterType, setFilterType] = useState('All');
-    const [filterBranch, setFilterBranch] = useState('All');
-    const [filterYear, setFilterYear] = useState('All');
-    const [sortAsc, setSortAsc] = useState(true);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [scheduleRows, setScheduleRows] = useState<any[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState<string>('');
+  const [generating, setGenerating] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-    const institutionId = college?.id || (user as any)?.institutionId;
-
-    useEffect(() => {
-        if (!institutionId) return;
-
-        setLoading(true);
-        const q = query(
-            collection(db, 'exams'),
-            where('institutionId', '==', institutionId),
-            orderBy('date', sortAsc ? 'asc' : 'desc')
-        );
-
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setExams(fetched);
-            setLoading(false);
-        }, (err) => {
-            console.error(err);
-            if (err.message.includes('requires an index')) {
-                // Fallback client sort if composite index is missing
-                console.warn('Missing composite index, initiating client fallback sorting');
-                const rawQ = query(collection(db, 'exams'), where('institutionId', '==', institutionId));
-                onSnapshot(rawQ, (rawSnap) => {
-                    const rawFetched = rawSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    rawFetched.sort((a: any, b: any) => {
-                        const d1 = new Date(a.date).getTime();
-                        const d2 = new Date(b.date).getTime();
-                        return sortAsc ? d1 - d2 : d2 - d1;
-                    });
-                    setExams(rawFetched);
-                    setLoading(false);
-                });
-            } else {
-                setError('Failed to securely load exams database.');
-                setLoading(false);
-            }
-        });
-
-        return () => unsubscribe();
-    }, [institutionId, sortAsc]);
-
-    // Derived filtering logic
-    const filteredExams = exams.filter(exam => {
-        let match = true;
-        if (searchTerm && !exam.examName?.toLowerCase().includes(searchTerm.toLowerCase()) && !exam.subject?.toLowerCase().includes(searchTerm.toLowerCase())) match = false;
-        if (filterDate && exam.date !== filterDate) match = false;
-        if (filterStatus !== 'All' && exam.status !== filterStatus) match = false;
-        if (filterType !== 'All' && exam.examType !== filterType) match = false;
-        if (filterBranch !== 'All' && !(exam.branches || []).includes(filterBranch)) match = false;
-        if (filterYear !== 'All' && !(exam.targetYears || []).includes(filterYear)) match = false;
-        return match;
-    });
-
-    const uniqueBranches = Array.from(new Set(exams.flatMap(e => e.branches || []))).sort();
-
-    const handleDelete = async (id: string) => {
-        if (!window.confirm("Are you sure you want to completely delete this examination map?")) return;
-        try {
-            await deleteDoc(doc(db, 'exams', id));
-        } catch (err) {
-            console.error(err);
-            alert("Failed to delete exam.");
-        }
-    };
-
-    const getStatusVariant = (status: string) => {
-        switch (status) {
-            case 'GENERATED': return 'default';
-            case 'CREATED': return 'secondary';
-            case 'GENERATING': return 'outline';
-            case 'PUBLISHED': return 'default';
-            default: return 'outline';
-        }
-    };
-
-    return (
-        <AdminLayout>
-            <div className="max-w-7xl mx-auto space-y-8 animate-fade-in pb-12">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                        <div className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
-                            <span>Admin</span><span>/</span><span>Exams</span><span>/</span><span className="text-foreground font-medium">Exam Schedule</span>
-                        </div>
-                        <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground mb-2">
-                            Master Timetable
-                        </h1>
-                        <p className="text-muted-foreground">
-                            Live synchronization of institutional exams, seating states, and overarching metadata.
-                        </p>
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-                        <Button onClick={() => navigate('/admin/exams/create')} className="w-full sm:w-auto">
-                            + Create New Exam
-                        </Button>
-                    </div>
-                </div>
-
-                <Card className="dashboard-card border-none shadow-sm">
-                    <CardContent className="p-4 flex flex-col gap-4 bg-muted/20 rounded-xl">
-                        <div className="flex flex-col md:flex-row gap-4 items-center w-full">
-                            <div className="relative w-full md:w-96 flex-shrink-0">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                <Input 
-                                    placeholder="Search by exam name or subject..." 
-                                    className="pl-9 bg-white"
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                />
-                            </div>
-                            
-                            <div className="flex flex-wrap items-center gap-3 w-full">
-                                <Input type="date" className="w-[160px] bg-white cursor-pointer" value={filterDate} onChange={e => setFilterDate(e.target.value)} />
-                                
-                                <Select value={filterType} onValueChange={setFilterType}>
-                                    <SelectTrigger className="w-[120px] bg-white text-gray-700">
-                                        <div className="flex items-center gap-2"><Filter className="w-4 h-4" /><SelectValue placeholder="Type" /></div>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="All">All Types</SelectItem>
-                                        <SelectItem value="Internal">Internal</SelectItem>
-                                        <SelectItem value="External">External</SelectItem>
-                                        <SelectItem value="Mid">MidTerm</SelectItem>
-                                        <SelectItem value="Final">Final</SelectItem>
-                                    </SelectContent>
-                                </Select>
-
-                                <Select value={filterBranch} onValueChange={setFilterBranch}>
-                                    <SelectTrigger className="w-[120px] bg-white text-gray-700">
-                                        <div className="flex items-center gap-2"><Filter className="w-4 h-4" /><SelectValue placeholder="Branch" /></div>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="All">All Branches</SelectItem>
-                                        {uniqueBranches.map((b: any) => (
-                                            <SelectItem key={b} value={b}>{b}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-
-                                <Select value={filterYear} onValueChange={setFilterYear}>
-                                    <SelectTrigger className="w-[120px] bg-white text-gray-700">
-                                        <div className="flex items-center gap-2"><Filter className="w-4 h-4" /><SelectValue placeholder="Year" /></div>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="All">All Years</SelectItem>
-                                        <SelectItem value="1st Year">1st Year</SelectItem>
-                                        <SelectItem value="2nd Year">2nd Year</SelectItem>
-                                        <SelectItem value="3rd Year">3rd Year</SelectItem>
-                                        <SelectItem value="4th Year">4th Year</SelectItem>
-                                    </SelectContent>
-                                </Select>
-
-                                <Select value={filterStatus} onValueChange={setFilterStatus}>
-                                    <SelectTrigger className="w-[120px] bg-white text-gray-700">
-                                        <div className="flex items-center gap-2"><Filter className="w-4 h-4" /><SelectValue placeholder="Status" /></div>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="All">All Statuses</SelectItem>
-                                        <SelectItem value="CREATED">Created</SelectItem>
-                                        <SelectItem value="GENERATING">Generating</SelectItem>
-                                        <SelectItem value="GENERATED">Generated</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {error ? (
-                    <div className="p-8 text-center border rounded-xl text-red-600 bg-red-50">{error}</div>
-                ) : loading ? (
-                    <div className="h-64 flex items-center justify-center border rounded-xl shadow-sm bg-white"><Activity className="animate-spin text-primary w-8 h-8" /></div>
-                ) : filteredExams.length === 0 ? (
-                    <div className="h-64 flex flex-col items-center justify-center border rounded-xl text-muted-foreground bg-white shadow-sm">
-                        <Calendar className="w-12 h-12 mb-4 opacity-50 text-gray-400" />
-                        <h3 className="text-lg font-semibold text-gray-700">No Exams Scheduled</h3>
-                        <p className="text-sm mt-1">Adjust filters or create a new examination to begin tracing operations.</p>
-                        <Button variant="outline" className="mt-6" onClick={() => navigate('/admin/exams/create')}>Initiate Exam Mapping</Button>
-                    </div>
-                ) : (
-                    <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm text-left">
-                                <thead className="bg-gray-50/80 border-b text-xs uppercase text-gray-500 font-semibold tracking-wider">
-                                    <tr>
-                                        <th className="px-6 py-4">Detailed Exam Name</th>
-                                        <th className="px-6 py-4 cursor-pointer hover:bg-gray-100 transition-colors" onClick={() => setSortAsc(!sortAsc)}>
-                                            <div className="flex items-center gap-1">Date & Time <ArrowUpDown className="w-3 h-3" /></div>
-                                        </th>
-                                        <th className="px-6 py-4">Cohort Mapping</th>
-                                        <th className="px-6 py-4">Total Capacity</th>
-                                        <th className="px-6 py-4">Operational Status</th>
-                                        <th className="px-6 py-4 text-right">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100">
-                                    {filteredExams.map((exam) => (
-                                        <tr key={exam.id} className="hover:bg-blue-50/30 transition-colors group">
-                                            <td className="px-6 py-4">
-                                                <div className="font-semibold text-gray-900">{exam.examName}</div>
-                                                <div className="text-xs text-muted-foreground mt-0.5">{exam.subject}</div>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="font-medium text-gray-900 whitespace-nowrap">{exam.date}</div>
-                                                <div className="text-xs text-muted-foreground mt-0.5">{exam.startTime} - {exam.endTime}</div>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="flex flex-wrap gap-1 max-w-[200px]">
-                                                    {exam.targetYears?.map((y: string) => <Badge variant="secondary" key={y} className="text-[10px] px-1.5 py-0 bg-blue-50 text-blue-700">{y}</Badge>)}
-                                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">{exam.examType}</Badge>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 font-mono text-gray-600">
-                                                {exam.totalStudents || 0} Students
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <Badge variant={getStatusVariant(exam.status)} className="capitalize">{exam.status || 'PENDING'}</Badge>
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <Button variant="ghost" size="icon" onClick={() => navigate(`/admin/exams/${exam.id}`)} className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50" title="View Details">
-                                                        <Eye className="w-4 h-4" />
-                                                    </Button>
-                                                    <Button variant="ghost" size="icon" onClick={() => navigate(`/admin/exams/edit/${exam.id}`)} className="h-8 w-8 text-amber-600 hover:text-amber-700 hover:bg-amber-50" title="Edit Exam">
-                                                        <Edit2 className="w-4 h-4" />
-                                                    </Button>
-                                                    <Button variant="ghost" size="icon" onClick={() => handleDelete(exam.id)} className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50" title="Delete Master Data">
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </Button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                )}
-            </div>
-        </AdminLayout>
+  useEffect(() => {
+    if (!institutionId) return;
+    const unsub = onSnapshot(
+      query(collection(db, 'examSessions'), where('institutionId', '==', institutionId)),
+      snap => {
+        const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as any))
+          .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+        setSessions(data);
+        if (!selectedSessionId && data.length > 0) setSelectedSessionId(data[0].id);
+        setLoading(false);
+      }
     );
+    return () => unsub();
+  }, [institutionId]);
+
+  useEffect(() => {
+    if (!institutionId || !selectedSessionId) { setScheduleRows([]); return; }
+    const unsub = onSnapshot(
+      query(collection(db, 'examSchedule'),
+        where('institutionId', '==', institutionId),
+        where('sessionId', '==', selectedSessionId)),
+      snap => {
+        const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as any))
+          .sort((a, b) => (a.date + a.slot).localeCompare(b.date + b.slot));
+        setScheduleRows(data);
+      }
+    );
+    return () => unsub();
+  }, [institutionId, selectedSessionId]);
+
+  const activeSession = useMemo(() => sessions.find(s => s.id === selectedSessionId), [sessions, selectedSessionId]);
+
+  // KPI metrics
+  const metrics = useMemo(() => {
+    const totalExams = sessions.length;
+    const scheduledSubjects = scheduleRows.length;
+    const pendingSubjects = (activeSession?.subjects?.length || 0) - scheduledSubjects;
+    const examDays = new Set(scheduleRows.map(r => r.date)).size;
+    return { totalExams, scheduledSubjects, pendingSubjects: Math.max(0, pendingSubjects), examDays };
+  }, [sessions, scheduleRows, activeSession]);
+
+  const handleGenerate = async () => {
+    if (!activeSession) return;
+    setGenerating(true);
+    try {
+      // Clear any prior schedule rows for this session
+      const existing = await getDocs(query(
+        collection(db, 'examSchedule'),
+        where('institutionId', '==', institutionId),
+        where('sessionId', '==', selectedSessionId)
+      ));
+      const clearBatch = writeBatch(db);
+      existing.docs.forEach(d => clearBatch.delete(d.ref));
+      await clearBatch.commit();
+
+      // Fetch students and rooms for capacity-aware risk scoring
+      const [stSnap, roomsSnap] = await Promise.all([
+        getDocs(query(collection(db, 'students'), where('institutionId', '==', institutionId))),
+        getDocs(query(collection(db, 'classrooms'), where('institutionId', '==', institutionId))),
+      ]);
+      const allStudents = stSnap.docs.map(d => d.data() as any);
+      const usableRooms = roomsSnap.docs.map(d => d.data() as any).filter(r => isUsableExamRoom(r.roomType));
+      const capacityTotal = totalRoomCapacity(usableRooms);
+
+      const rules = activeSession.rules || {};
+      const subjects: any[] = activeSession.subjects || [];
+      const classifications: any[] = activeSession.subjectClassifications || [];
+      const similarity = activeSession.branchSimilarity || {};
+      const strategy: SchedulingStrategy = activeSession.schedulingStrategy || 'AI_OPTIMIZED';
+      const stratCfg = schedulingStrategyConfig(strategy);
+      const maxDurationDays: number = Math.max(1, parseInt(activeSession.maxDurationDays) || 7);
+      // Auto-detect branch groups (Group-A: CSE/CSM/CSD, Group-B: ECE/EEE, ...).
+      // Manual overrides come from branch docs (field: groupOverride).
+      const branchOverrides: Record<string, string> = activeSession.branchGroupOverrides || {};
+      const { branchToGroup } = detectBranchGroups(activeSession.subjects || [], branchOverrides);
+      const classOf = (id: string) => classifications.find(c => c.id === id)?.classification || 'BRANCH';
+
+      // Risk-aware ordering: HIGH-risk COMMON first (spread across days), then CORE, then BRANCH, then LAB
+      const orderRank = (cls: string) => ({ COMMON: 0, CORE: 1, BRANCH: 2, LAB: 3, SUPPLEMENTARY: 4 } as any)[cls] ?? 2;
+      subjects.sort((a, b) => {
+        const ra = orderRank(classOf(a.id));
+        const rb = orderRank(classOf(b.id));
+        if (ra !== rb) return ra - rb;
+        return (a.year + a.subjectCode).localeCompare(b.year + b.subjectCode);
+      });
+
+      const cohortLast: Record<string, string> = {};
+      const dateCohortCount: Record<string, Record<string, number>> = {};
+      const dateSlotUsed: Record<string, Set<string>> = {};
+      const dateHasHighRisk: Record<string, boolean> = {};
+      const dateSlotSubjects: Record<string, Set<string>> = {}; // `${date}|${slot}` -> subjectCodes
+      // Track HIGH-risk branch groups already placed on a date to avoid grouping similar branches together.
+      const dateHighRiskGroups: Record<string, Set<string>> = {};
+      // FAST strategy shrinks gap & raises per-day to meet the duration budget.
+      const minGap = strategy === 'FAST' ? 0 : Math.max(0, parseInt(rules.minGapDays) || 0);
+      const maxPerDay = strategy === 'FAST' ? Math.max(stratCfg.slotsPerDay, parseInt(rules.maxPerDay) || 1) : Math.max(1, parseInt(rules.maxPerDay) || 1);
+      const slots = stratCfg.slotsPerDay >= 3 ? ['Morning', 'Afternoon', 'Evening'] : ['Morning', 'Afternoon'];
+      const startBase = todayPlus(3);
+      void maxDurationDays; // soft budget enforced post-commit via overrun warning
+
+      const findSlot = (cohorts: string[], subjectCode: string, isHighRisk: boolean, primaryBranch: string): { date: string; slot: string } => {
+        const subjectGroup = branchToGroup[primaryBranch] || primaryBranch;
+        let cursor = startBase;
+        for (let safety = 0; safety < 365; safety++) {
+          if (!rules.includeSunday && isSunday(cursor)) { cursor = addDays(cursor, 1); continue; }
+          // HIGH-risk COMMON: only one per day
+          if (isHighRisk && dateHasHighRisk[cursor]) { cursor = addDays(cursor, 1); continue; }
+          // For HIGH-risk subjects, avoid placing another HIGH-risk paper from the same branch-group on the same day.
+          if (isHighRisk && (dateHighRiskGroups[cursor]?.has(subjectGroup))) { cursor = addDays(cursor, 1); continue; }
+          const gapOk = cohorts.every(c => {
+            const last = cohortLast[c];
+            if (!last) return true;
+            const diff = Math.round((new Date(cursor).getTime() - new Date(last).getTime()) / 86400000);
+            return diff > minGap;
+          });
+          const countOk = cohorts.every(c => (dateCohortCount[cursor]?.[c] || 0) < maxPerDay);
+          if (gapOk && countOk) {
+            for (const slot of slots) {
+              const used = dateSlotUsed[cursor] || new Set();
+              const slotKey = (sl: string) => cohorts.map(c => `${sl}|${c}`);
+              const cohortConflict = !rules.allowParallel && slotKey(slot).some(k => used.has(k));
+              if (cohortConflict) continue;
+              // Avoid same subjectCode in same slot for similar branches (riskScore > 0.5)
+              const slotSubs = dateSlotSubjects[`${cursor}|${slot}`] || new Set();
+              if (slotSubs.has(subjectCode)) continue;
+              const similarConflict = Array.from(slotSubs).some(scInSlot => {
+                // crude: just block same code unless allowParallel — handled above; nothing else here
+                return false;
+              });
+              if (similarConflict) continue;
+              return { date: cursor, slot };
+            }
+          }
+          cursor = addDays(cursor, 1);
+        }
+        return { date: cursor, slot: 'Morning' };
+      };
+
+      const batch = writeBatch(db);
+      const rowsToAdd: any[] = [];
+      const rowsForScore: any[] = [];
+
+      for (const sub of subjects) {
+        const subYear = normYear(sub.year);
+        const branches = activeSession.branches?.includes(sub.branch) ? [sub.branch] : [sub.branch];
+        const cohorts = branches.map((b: string) => `${b}|${subYear}`);
+
+        const studentCount = allStudents.filter(st =>
+          branches.includes(st.branch) &&
+          normYear(st.year) === subYear &&
+          (activeSession.examCategory === 'Regular + Supplementary'
+            || activeSession.examCategory === (st.examType || 'Regular'))
+        ).length;
+
+        const classification = classOf(sub.id);
+        const risk = computeSeatingRisk({ classification }, studentCount, capacityTotal);
+        const mode = pickBenchMode(risk, classification === 'LAB');
+        const isHighRisk = risk === 'HIGH' && classification === 'COMMON';
+
+        const { date, slot } = findSlot(cohorts, sub.subjectCode, isHighRisk, sub.branch);
+        cohorts.forEach((c: string) => {
+          cohortLast[c] = date;
+          dateCohortCount[date] = dateCohortCount[date] || {};
+          dateCohortCount[date][c] = (dateCohortCount[date][c] || 0) + 1;
+          dateSlotUsed[date] = dateSlotUsed[date] || new Set();
+          dateSlotUsed[date].add(`${slot}|${c}`);
+        });
+        if (isHighRisk) {
+          dateHasHighRisk[date] = true;
+          (dateHighRiskGroups[date] = dateHighRiskGroups[date] || new Set()).add(branchToGroup[sub.branch] || sub.branch);
+        }
+        const slotKey = `${date}|${slot}`;
+        (dateSlotSubjects[slotKey] = dateSlotSubjects[slotKey] || new Set()).add(sub.subjectCode);
+
+        const ref = doc(collection(db, 'examSchedule'));
+        batch.set(ref, {
+          institutionId,
+          sessionId: selectedSessionId,
+          sessionName: activeSession.examName,
+          subjectId: sub.id,
+          subjectCode: sub.subjectCode,
+          subjectName: sub.subjectName,
+          branches,
+          year: subYear,
+          semester: sub.semester,
+          date,
+          slot,
+          startTime: SLOT_TIMES[slot].start,
+          endTime: SLOT_TIMES[slot].end,
+          studentCount,
+          classification,
+          seatingRisk: risk,
+          mode,
+          status: 'SCHEDULED',
+          createdAt: serverTimestamp(),
+        });
+        rowsToAdd.push({ subject: sub.subjectCode, date, slot });
+        rowsForScore.push({ date, slot, subjectCode: sub.subjectCode, branches, year: subYear });
+      }
+
+      await batch.commit();
+      const optimizationScore = scoreSchedule(rowsForScore, similarity);
+      const uniqueDates = Array.from(new Set(rowsForScore.map(r => r.date))).sort();
+      const actualDays = uniqueDates.length;
+      const overran = actualDays > maxDurationDays;
+      await updateDoc(doc(db, 'examSessions', selectedSessionId), {
+        status: 'SCHEDULED',
+        optimizationScore,
+        actualDays,
+        recommendedDays: activeSession.feasibility?.recommendedDays || actualDays,
+        durationOverrun: overran,
+      });
+
+      toast({
+        title: overran ? 'Schedule generated (over budget)' : 'Schedule generated',
+        description: `${rowsToAdd.length} subjects in ${actualDays}d (budget ${maxDurationDays}d) • Score ${optimizationScore}/100.`,
+        variant: overran ? 'destructive' : 'default',
+      });
+    } catch (err: any) {
+      console.error(err);
+      toast({ title: 'Schedule generation failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleDeleteSession = async (id: string) => {
+    if (!confirm('Delete this exam session and its schedule?')) return;
+    try {
+      // delete schedule rows
+      const sch = await getDocs(query(collection(db, 'examSchedule'),
+        where('institutionId', '==', institutionId),
+        where('sessionId', '==', id)));
+      const b = writeBatch(db);
+      sch.docs.forEach(d => b.delete(d.ref));
+      await b.commit();
+      await deleteDoc(doc(db, 'examSessions', id));
+      if (selectedSessionId === id) setSelectedSessionId('');
+      toast({ title: 'Session deleted' });
+    } catch (err: any) {
+      toast({ title: 'Delete failed', description: err.message, variant: 'destructive' });
+    }
+  };
+
+  return (
+    <AdminLayout>
+      <div className="max-w-7xl mx-auto space-y-6 animate-fade-in pb-12">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
+              <span>Admin</span><span>/</span><span>Exams</span><span>/</span><span className="text-foreground font-medium">Exam Schedule</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-display font-bold mb-1">Exam Schedule</h1>
+            <p className="text-muted-foreground">Generate and review AI-built timetables for created exams.</p>
+          </div>
+          <Button onClick={() => navigate('/admin/exams/create')}>+ Create Exam</Button>
+        </div>
+
+        {/* KPI cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <KpiCard label="Total Exams" value={metrics.totalExams} icon={<BookOpen className="w-5 h-5 text-primary" />} />
+          <KpiCard label="Scheduled Subjects" value={metrics.scheduledSubjects} icon={<CheckCircle2 className="w-5 h-5 text-emerald-600" />} />
+          <KpiCard label="Pending Subjects" value={metrics.pendingSubjects} icon={<Clock className="w-5 h-5 text-amber-600" />} />
+          <KpiCard label="Exam Days" value={metrics.examDays} icon={<Calendar className="w-5 h-5 text-blue-600" />} />
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Sessions list */}
+          <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-base">Exam Sessions</CardTitle>
+              <CardDescription>Pick a session to view or generate its schedule.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2 max-h-[600px] overflow-y-auto">
+              {loading && <div className="flex justify-center py-8"><Activity className="animate-spin text-muted-foreground" /></div>}
+              {!loading && sessions.length === 0 && (
+                <div className="text-center text-sm text-muted-foreground py-8">
+                  No exam sessions yet.
+                  <Button variant="link" onClick={() => navigate('/admin/exams/create')}>Create one</Button>
+                </div>
+              )}
+              {sessions.map(s => (
+                <button
+                  key={s.id}
+                  onClick={() => setSelectedSessionId(s.id)}
+                  className={`w-full text-left p-3 rounded-lg border transition-all ${selectedSessionId === s.id ? 'border-primary bg-primary/5' : 'hover:bg-muted/30'}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold truncate">{s.examName}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">{s.examType} • {s.academicYear}</div>
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        <Badge variant="secondary" className="text-[10px]">{s.subjects?.length || 0} subjects</Badge>
+                        <Badge variant="outline" className="text-[10px]">{s.totalStudents || 0} students</Badge>
+                        <Badge className={`text-[10px] ${s.status === 'SCHEDULED' ? 'bg-emerald-100 text-emerald-700' : s.status === 'SEATED' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>{s.status}</Badge>
+                        {typeof s.optimizationScore === 'number' && (
+                          <Badge variant="outline" className="text-[10px]">Score {s.optimizationScore}/100</Badge>
+                        )}
+                      </div>
+                    </div>
+                    <Trash2 className="w-4 h-4 text-muted-foreground hover:text-red-500 cursor-pointer flex-shrink-0" onClick={(e) => { e.stopPropagation(); handleDeleteSession(s.id); }} />
+                  </div>
+                </button>
+              ))}
+            </CardContent>
+          </Card>
+
+          {/* Schedule detail */}
+          <Card className="shadow-sm lg:col-span-2">
+            <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-3">
+              <div>
+                <CardTitle className="text-base">{activeSession ? activeSession.examName : 'Select a session'}</CardTitle>
+                <CardDescription>{activeSession ? `${activeSession.subjects?.length || 0} subjects • ${activeSession.branches?.join(', ')}` : '—'}</CardDescription>
+              </div>
+              {activeSession && (
+                <div className="flex gap-2 flex-wrap">
+                  <Button onClick={handleGenerate} disabled={generating}>
+                    {generating ? <><Activity className="w-4 h-4 mr-2 animate-spin" />Generating</> : <><Sparkles className="w-4 h-4 mr-2" />Generate Schedule</>}
+                  </Button>
+                  {scheduleRows.length > 0 && (
+                    <>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline"><Download className="w-4 h-4 mr-2" /> Export</Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => exportTimetablePDF({
+                            matrix: buildTimetableMatrix(scheduleRows, activeSession.branches),
+                            institutionName: college?.name || (college as any)?.institutionName || 'Institution',
+                            examName: activeSession.examName,
+                            academicYear: activeSession.academicYear,
+                            semester: activeSession.semester,
+                            regulation: activeSession.regulation,
+                          })}><FileText className="w-4 h-4 mr-2" /> Timetable PDF</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => exportTimetableExcel({
+                            matrix: buildTimetableMatrix(scheduleRows, activeSession.branches),
+                            institutionName: college?.name || 'Institution',
+                            examName: activeSession.examName,
+                          })}><FileSpreadsheet className="w-4 h-4 mr-2" /> Timetable Excel</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => printTimetable({
+                            matrix: buildTimetableMatrix(scheduleRows, activeSession.branches),
+                            institutionName: college?.name || 'Institution',
+                            examName: activeSession.examName,
+                            academicYear: activeSession.academicYear,
+                            semester: activeSession.semester,
+                            regulation: activeSession.regulation,
+                          })}><Printer className="w-4 h-4 mr-2" /> Print View</DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <Button variant="outline" onClick={() => navigate('/admin-generate-seating')}>
+                        Next: Seating <ArrowRight className="w-4 h-4 ml-2" />
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
+            </CardHeader>
+            <CardContent>
+              {!activeSession ? (
+                <div className="text-center py-12 text-muted-foreground">Select a session to view its schedule.</div>
+              ) : scheduleRows.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground border border-dashed rounded-lg">
+                  <Layers className="w-10 h-10 mx-auto mb-2 opacity-40" />
+                  <p>No schedule generated yet.</p>
+                  <p className="text-xs mt-1">Click <strong>Generate Schedule</strong> to let AI build the timetable.</p>
+                </div>
+              ) : (
+                <Tabs defaultValue="matrix" className="w-full">
+                  <TabsList className="mb-3">
+                    <TabsTrigger value="matrix"><Grid3x3 className="w-4 h-4 mr-2" />Matrix (Date × Branch)</TabsTrigger>
+                    <TabsTrigger value="list"><List className="w-4 h-4 mr-2" />List View</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="matrix">
+                    {(() => {
+                      const m = buildTimetableMatrix(scheduleRows, activeSession.branches);
+                      return (
+                        <div className="overflow-x-auto border rounded-lg">
+                          <table className="w-full text-xs border-collapse">
+                            <thead>
+                              <tr className="bg-primary text-primary-foreground">
+                                <th className="px-2 py-2 border border-primary/40 text-left sticky left-0 bg-primary">Date</th>
+                                {m.branches.map(b => (
+                                  <th key={b} className="px-2 py-2 border border-primary/40 text-center min-w-[140px]">{b}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {m.dates.map(d => (
+                                <tr key={d} className="hover:bg-muted/20">
+                                  <td className="px-2 py-2 border bg-muted/40 font-medium sticky left-0">{d}</td>
+                                  {m.branches.map(b => {
+                                    const cells = m.rows[d]?.[b] || [];
+                                    return (
+                                      <td key={b} className="px-2 py-2 border text-center align-top">
+                                        {cells.length === 0 ? <span className="text-muted-foreground">—</span>
+                                          : cells.map((c, i) => (
+                                            <div key={i} className={i > 0 ? 'border-t border-dashed mt-1 pt-1' : ''}>
+                                              <div className="font-mono font-semibold">{c.subjectCode}</div>
+                                              <div className="text-[10px] text-muted-foreground leading-tight">{c.subjectName}</div>
+                                              {cells.length > 1 && <Badge variant="outline" className="text-[9px] mt-0.5">{c.slot}</Badge>}
+                                            </div>
+                                          ))}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                          <div className="px-3 py-2 text-[10px] text-muted-foreground bg-muted/20 border-t flex gap-3 flex-wrap">
+                            {Object.entries(m.slots).map(([k, v]) => <span key={k}><strong>{k}:</strong> {v.start}–{v.end}</span>)}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </TabsContent>
+
+                  <TabsContent value="list">
+                    <div className="overflow-x-auto border rounded-lg">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
+                          <tr>
+                            <th className="px-3 py-2 text-left">Date</th>
+                            <th className="px-3 py-2 text-left">Session</th>
+                            <th className="px-3 py-2 text-left">Code</th>
+                            <th className="px-3 py-2 text-left">Subject</th>
+                            <th className="px-3 py-2 text-left">Year</th>
+                            <th className="px-3 py-2 text-left">Branch</th>
+                            <th className="px-3 py-2 text-left">Students</th>
+                            <th className="px-3 py-2 text-left">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {scheduleRows.map(r => (
+                            <tr key={r.id} className="hover:bg-muted/20">
+                              <td className="px-3 py-2 font-medium">{r.date}</td>
+                              <td className="px-3 py-2">
+                                <Badge variant="outline" className="text-[10px]">{r.slot}</Badge>
+                                <div className="text-[10px] text-muted-foreground mt-0.5">{r.startTime}-{r.endTime}</div>
+                              </td>
+                              <td className="px-3 py-2 font-mono text-xs">{r.subjectCode}</td>
+                              <td className="px-3 py-2">{r.subjectName}</td>
+                              <td className="px-3 py-2">{r.year}</td>
+                              <td className="px-3 py-2">{(r.branches || []).join(', ')}</td>
+                              <td className="px-3 py-2 tabular-nums">{r.studentCount}</td>
+                              <td className="px-3 py-2"><Badge className="text-[10px] bg-emerald-100 text-emerald-700">{r.status}</Badge></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </AdminLayout>
+  );
 }
+
+const KpiCard = ({ label, value, icon }: any) => (
+  <Card className="shadow-sm">
+    <CardContent className="p-4 flex items-center justify-between">
+      <div>
+        <div className="text-xs text-muted-foreground uppercase tracking-wider">{label}</div>
+        <div className="text-2xl font-bold mt-1 tabular-nums">{value}</div>
+      </div>
+      <div className="p-2 bg-muted/40 rounded-lg">{icon}</div>
+    </CardContent>
+  </Card>
+);

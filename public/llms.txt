@@ -1,0 +1,11 @@
+# ExamSeat Pro
+
+> AI-powered examination seating and invigilation management system for engineering colleges, built with Firebase and Gemini AI.
+
+ExamSeat Pro helps institutions generate fair seating plans (preventing adjacent same-branch students), manage invigilation duties, and let students instantly locate their exam seats.
+
+## Pages
+
+- [Home](/): Overview and entry to Admin, HOD, Faculty, and Student panels.
+- [Student Seat Lookup](/student/verify): Students verify identity to find their assigned seat.
+- [Faculty Verification](/faculty/verify): Faculty verify identity to view invigilation duties.
