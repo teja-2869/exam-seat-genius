@@ -4,12 +4,12 @@ import { Button } from '@/components/ui/button';
 import { ClipboardCheck, Clock, Eye, MapPin } from 'lucide-react';
 
 export interface TodayDutyProps {
-    hasExamToday: boolean;
+    duty: any | null;
     onStartAttendance: () => void;
 }
 
-export const FacultyTodayDuty: React.FC<TodayDutyProps> = ({ hasExamToday, onStartAttendance }) => {
-    if (!hasExamToday) {
+export const FacultyTodayDuty: React.FC<TodayDutyProps> = ({ duty, onStartAttendance }) => {
+    if (!duty) {
         return (
             <Card className="dashboard-card border-none shadow-sm flex items-center justify-center p-12 bg-card">
                 <div className="text-center space-y-4">
@@ -36,13 +36,15 @@ export const FacultyTodayDuty: React.FC<TodayDutyProps> = ({ hasExamToday, onSta
                     <div className="flex items-center gap-2 mb-2">
                         <span className="px-2.5 py-1 uppercase text-[10px] font-bold tracking-wider text-primary border border-primary/20 bg-primary/10 rounded-full flex items-center gap-1.5">
                             <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                            Active Duty
+                            {duty.attendanceSubmitted ? 'Duty Completed' : 'Active Duty'}
                         </span>
                     </div>
-                    <h2 className="text-2xl font-display font-bold text-foreground">
-                        Data Structures - Internal
+                    <h2 className="text-2xl font-display font-bold text-foreground truncate max-w-xs sm:max-w-none">
+                        {duty.sessionName}
                     </h2>
-                    <p className="text-muted-foreground text-sm font-medium mt-1">CS301 • 45 Students</p>
+                    <p className="text-muted-foreground text-sm font-medium mt-1">
+                        {duty.facultyDepartment} • {duty.studentCount} Students
+                    </p>
                 </div>
 
                 <div className="flex flex-wrap gap-4 sm:gap-8">
@@ -52,7 +54,7 @@ export const FacultyTodayDuty: React.FC<TodayDutyProps> = ({ hasExamToday, onSta
                         </div>
                         <div>
                             <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Location</p>
-                            <p className="font-semibold text-sm">Room 1101, Block 1</p>
+                            <p className="font-semibold text-sm">Room {duty.roomNumber}, Block {duty.blockNumber}</p>
                         </div>
                     </div>
 
@@ -62,7 +64,7 @@ export const FacultyTodayDuty: React.FC<TodayDutyProps> = ({ hasExamToday, onSta
                         </div>
                         <div>
                             <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Time</p>
-                            <p className="font-semibold text-sm">10:00 AM - 1:00 PM</p>
+                            <p className="font-semibold text-sm">{duty.startTime} - {duty.endTime}</p>
                         </div>
                     </div>
                 </div>
@@ -72,13 +74,10 @@ export const FacultyTodayDuty: React.FC<TodayDutyProps> = ({ hasExamToday, onSta
                         size="lg"
                         className="w-full sm:w-auto flex-1 font-semibold tracking-wide"
                         onClick={onStartAttendance}
+                        disabled={duty.attendanceSubmitted}
                     >
                         <ClipboardCheck className="w-5 h-5 mr-2" />
-                        Start Attendance
-                    </Button>
-                    <Button variant="outline" size="lg" className="w-full sm:w-auto bg-background/50 backdrop-blur">
-                        <Eye className="w-5 h-5 mr-2" />
-                        Seating Preview
+                        {duty.attendanceSubmitted ? 'Attendance Submitted' : 'Start Attendance'}
                     </Button>
                 </div>
             </CardContent>

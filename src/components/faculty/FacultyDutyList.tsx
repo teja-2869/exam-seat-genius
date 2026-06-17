@@ -26,40 +26,58 @@ export const FacultyDutyList: React.FC = () => {
 
     useEffect(() => {
         const fetchDuties = async () => {
-            // Mock data for immediate operational functionality (assuming backend lacks this active collection)
-            const mockDuties: Duty[] = [
-                {
-                    id: '1',
-                    exam: 'Data Structures - Internal',
-                    subject: 'CS301',
-                    date: 'Jan 15, 2025',
-                    time: '10:00 AM - 1:00 PM',
-                    room: '1101',
-                    block: 'Block 1',
-                    floor: 1,
-                    students: 45,
-                    status: 'upcoming'
-                },
-                {
-                    id: '2',
-                    exam: 'Database Management - External',
-                    subject: 'CS302',
-                    date: 'Jan 18, 2025',
-                    time: '2:00 PM - 5:00 PM',
-                    room: '1201',
-                    block: 'Block 1',
-                    floor: 2,
-                    students: 52,
-                    status: 'upcoming'
-                },
-            ];
+            const castedUser = user as any;
+            if (!castedUser?.institutionId && !college?.id) {
+                setLoading(false);
+                return;
+            }
 
-            setDuties(mockDuties);
-            setLoading(false);
+            const collId = castedUser?.institutionId || castedUser?.collegeId || college?.id;
+            const uid = castedUser?.uid || castedUser?.id;
+
+            if (!uid) {
+                setLoading(false);
+                return;
+            }
+
+            try {
+                setLoading(true);
+                const q = query(
+                    collection(db, 'invigilations'),
+                    where('institutionId', '==', collId),
+                    where('assignedFacultyId', '==', uid),
+                    where('status', '==', 'upcoming')
+                );
+                const snap = await getDocs(q);
+                const fetchedDuties: Duty[] = snap.docs.map(doc => {
+                    const data = doc.data();
+                    return {
+                        id: doc.id,
+                        exam: data.sessionName || 'Exam Session',
+                        subject: data.facultyDepartment || 'Department Room',
+                        date: data.date,
+                        time: `${data.startTime} - ${data.endTime}`,
+                        room: data.roomNumber || '',
+                        block: data.blockNumber ? `Block ${data.blockNumber}` : '',
+                        floor: Number(data.floorNumber) || 0,
+                        students: Number(data.studentCount) || 0,
+                        status: data.status || 'upcoming'
+                    };
+                });
+                
+                // Sort by date chronologically
+                fetchedDuties.sort((a, b) => a.date.localeCompare(b.date));
+
+                setDuties(fetchedDuties);
+            } catch (err) {
+                console.error("Error fetching duties:", err);
+            } finally {
+                setLoading(false);
+            }
         };
 
         fetchDuties();
-    }, [(user as any)?.institutionId, (user as any)?.collegeId, college?.id, user?.id]);
+    }, [user, college]);
 
     return (
         <Card className="dashboard-card border-none shadow-sm h-full flex flex-col">

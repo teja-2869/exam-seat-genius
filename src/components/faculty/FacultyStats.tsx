@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Calendar, CheckCircle2, ClipboardList, Clock, Loader2 } from 'lucide-react';
 import { db } from '@/lib/firebase';
-import { collection, query, where, getCountFromServer } from 'firebase/firestore';
+import { collection, query, where, getCountFromServer, getDocs } from 'firebase/firestore';
 import { useAuth } from '@/contexts/AuthContext';
 import { startOfDay, endOfDay } from 'date-fns';
 
@@ -24,7 +24,7 @@ export const FacultyStats: React.FC = () => {
             }
 
             const collId = castedUser?.institutionId || castedUser?.collegeId || college?.id;
-            const uid = castedUser?.id; // Assigned faculty ID
+            const uid = castedUser?.uid || castedUser?.id;
 
             if (!uid) {
                 setLoading(false);
@@ -34,22 +34,20 @@ export const FacultyStats: React.FC = () => {
             try {
                 setLoading(true);
 
-                const todayStart = startOfDay(new Date());
-                const todayEnd = endOfDay(new Date());
-
-                // MOCK QUERIES based on the requirement structure.
-                // Replace these with actual schemas in production.
+                const todayStr = new Date().toISOString().split('T')[0];
 
                 const myDutiesRef = collection(db, 'invigilations');
 
+                // 1. Today's duties count
                 const todayQuery = query(
                     myDutiesRef,
                     where('institutionId', '==', collId),
                     where('assignedFacultyId', '==', uid),
-                    where('date', '>=', todayStart),
-                    where('date', '<=', todayEnd)
+                    where('date', '==', todayStr),
+                    where('status', '!=', 'cancelled')
                 );
 
+                // 2. Upcoming duties count
                 const upcomingQuery = query(
                     myDutiesRef,
                     where('institutionId', '==', collId),
@@ -57,14 +55,16 @@ export const FacultyStats: React.FC = () => {
                     where('status', '==', 'upcoming')
                 );
 
+                // 3. Pending Attendance (Assigned duties in the past/today where attendance is not submitted)
                 const pendingAttendanceQuery = query(
                     myDutiesRef,
                     where('institutionId', '==', collId),
                     where('assignedFacultyId', '==', uid),
-                    where('status', '==', 'completed'),
-                    where('attendanceSubmitted', '==', false)
+                    where('attendanceSubmitted', '==', false),
+                    where('status', '!=', 'cancelled')
                 );
 
+                // 4. Completed duties count
                 const completedQuery = query(
                     myDutiesRef,
                     where('institutionId', '==', collId),
@@ -72,23 +72,22 @@ export const FacultyStats: React.FC = () => {
                     where('status', '==', 'completed')
                 );
 
-                // For now, simulate counts gracefully if the DB doesn't have the collections ready.
-                // In production, these Promise.all's will run getCountFromServer.
+                const [todaySnap, upcomingSnap, pendingSnap, completedSnap] = await Promise.all([
+                    getCountFromServer(todayQuery),
+                    getCountFromServer(upcomingQuery),
+                    getCountFromServer(pendingAttendanceQuery),
+                    getCountFromServer(completedQuery)
+                ]);
 
-                // const [todaySnap, upcomingSnap, pendingSnap, completedSnap] = await Promise.all([
-                //     getCountFromServer(todayQuery),
-                //     getCountFromServer(upcomingQuery),
-                //     getCountFromServer(pendingAttendanceQuery),
-                //     getCountFromServer(completedQuery)
-                // ]);
-
-                // Hardcoding 0 defaults unless there's an actual active DB schema hooked up.
+                // Filter pending counts locally to only include today or past duties
+                const allPendingSnap = await getDocs(pendingAttendanceQuery);
+                const pendingCount = allPendingSnap.docs.filter(d => d.data().date <= todayStr).length;
 
                 setStats({
-                    todayExams: 1, // Simulated: 1 exam today
-                    upcoming: 3, // Simulated: 3 upcoming
-                    pendingAttendance: 1, // Simulated
-                    completed: 12, // Simulated
+                    todayExams: todaySnap.data().count,
+                    upcoming: upcomingSnap.data().count,
+                    pendingAttendance: pendingCount,
+                    completed: completedSnap.data().count,
                 });
             } catch (error) {
                 console.error("Error fetching faculty stats:", error);
@@ -98,7 +97,7 @@ export const FacultyStats: React.FC = () => {
         };
 
         fetchStats();
-    }, [(user as any)?.institutionId, (user as any)?.collegeId, college?.id, user?.id]);
+    }, [user, college]);
 
     const statCards = [
         { label: "Today's Assigned Exams", value: stats.todayExams, icon: Clock, color: 'text-primary', bg: 'bg-primary/10' },
