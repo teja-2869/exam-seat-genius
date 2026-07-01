@@ -601,7 +601,7 @@ export default function AdminAttendanceReports() {
                         <TableCell className="text-right">
                           <Badge className={
                             f.status === 'Submitted' ? 'bg-emerald-100 text-emerald-800' :
-                            f.status === 'Late Submission' ? 'bg-amber-100 text-amber-800' :
+                            (f.status as string) === 'Late Submission' ? 'bg-amber-100 text-amber-800' :
                             'bg-slate-200 text-slate-700'
                           }>{f.status}</Badge>
                         </TableCell>
